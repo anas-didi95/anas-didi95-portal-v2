@@ -1,6 +1,9 @@
 {
 	"name": "Java & Typescript",
-	"image": "ghcr.io/prulloac/base:bookworm",
+	"dockerComposeFile": "../docker-compose.yml",
+	"service": "workspace",
+	"workspaceFolder": "/workspaces/anas-didi95-portal",
+	"remoteUser": "vscode",
 
 	// 👇 Features to add to the Dev Container. More info: https://containers.dev/implementors/features.
 	"features": {
