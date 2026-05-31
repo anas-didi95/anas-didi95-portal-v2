@@ -1,12 +1,8 @@
-version: '3.8'
 services:
-  workspace:
-    image: ghcr.io/prulloac/base:bookworm
-    container_name: anas-didi95-portal-dev
-    working_dir: /workspaces/anas-didi95-portal
-    environment:
-      - SHELL=/bin/bash
+  app:
+    image: "mcr.microsoft.com/devcontainers/java:3-25-trixie"
+    command: "sleep infinity"
+    logging:
+      driver: "local"
     volumes:
-      - ./:/workspaces/anas-didi95-portal
-    tty: true
-    stdin_open: true
+      - "./:/home/vscode/workspace:z"
