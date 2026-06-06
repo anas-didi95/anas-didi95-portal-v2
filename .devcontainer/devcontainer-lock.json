@@ -9,6 +9,11 @@
       "version": "2.0.0",
       "resolved": "ghcr.io/devcontainers/features/node@sha256:fedd4c11f7adfb64283b578dddc7da906728daa25fa293351c9d913231acf12f",
       "integrity": "sha256:fedd4c11f7adfb64283b578dddc7da906728daa25fa293351c9d913231acf12f"
+    },
+    "ghcr.io/sliekens/devcontainer-features/opencode:1": {
+      "version": "1.0.2",
+      "resolved": "ghcr.io/sliekens/devcontainer-features/opencode@sha256:cdad6f8735e534204252b81cf3e31765adea0a50a4307aae814e23a7784908e4",
+      "integrity": "sha256:cdad6f8735e534204252b81cf3e31765adea0a50a4307aae814e23a7784908e4"
     }
   }
 }
