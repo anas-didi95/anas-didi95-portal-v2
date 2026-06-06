@@ -1,1 +1,4 @@
 .spotless-cache/
+logs/
+
+*.log
