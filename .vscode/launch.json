@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-UamApplication<uam>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.anasdidi.uam.UamApplication",
+            "projectName": "uam",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
