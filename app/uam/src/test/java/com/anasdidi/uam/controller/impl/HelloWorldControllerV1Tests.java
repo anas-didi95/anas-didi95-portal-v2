@@ -4,9 +4,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.anasdidi.common.enums.ResponseEnum;
-import com.anasdidi.uam.dto.HelloWorldReqDTO2;
-import com.anasdidi.uam.dto.HelloWorldResDTO2;
-import com.anasdidi.uam.dto.HelloWorldResDTO2.HelloWorldResDTO2Payload;
+import com.anasdidi.uam.dto.HelloWorldReqDTO;
+import com.anasdidi.uam.dto.HelloWorldResDTO;
+import com.anasdidi.uam.dto.HelloWorldResDTO.HelloWorldResDTO2Payload;
 import com.anasdidi.uam.service.impl.HelloWorldService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,13 +40,13 @@ class HelloWorldControllerV1Tests {
 
   @Test
   void testGreeting() {
-    var mockResponse = HelloWorldResDTO2.builder()
+    var mockResponse = HelloWorldResDTO.builder()
         .correlationId(CORRELATION_ID)
         .response(ResponseEnum.S00_SUCCESS)
         .payload(HelloWorldResDTO2Payload.builder().greeting("Hi, John").build())
         .build();
 
-    when(helloWorldService.execute(any(HelloWorldReqDTO2.class)))
+    when(helloWorldService.execute(any(HelloWorldReqDTO.class)))
         .thenReturn(Mono.just(mockResponse));
 
     webTestClient

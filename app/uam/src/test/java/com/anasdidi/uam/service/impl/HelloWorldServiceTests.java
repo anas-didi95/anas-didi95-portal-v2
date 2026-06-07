@@ -6,9 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.anasdidi.common.enums.ResponseEnum;
-import com.anasdidi.uam.dto.HelloWorldReqDTO2;
-import com.anasdidi.uam.dto.HelloWorldReqDTO2.HelloWorldReqDTO2Payload;
-import com.anasdidi.uam.dto.HelloWorldResDTO2;
+import com.anasdidi.uam.dto.HelloWorldReqDTO;
+import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTO2Payload;
+import com.anasdidi.uam.dto.HelloWorldResDTO;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,12 +22,12 @@ class HelloWorldServiceTests {
 
   @Test
   void testExecute() {
-    HelloWorldReqDTO2 req = HelloWorldReqDTO2.builder()
+    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
         .correlationId("corr-123")
         .payload(HelloWorldReqDTO2Payload.builder().name("John").build())
         .build();
 
-    HelloWorldResDTO2 result = helloWorldService.execute(req).block();
+    HelloWorldResDTO result = helloWorldService.execute(req).block();
 
     assertNotNull(result);
     assertEquals("corr-123", result.getCorrelationId());
@@ -38,7 +38,7 @@ class HelloWorldServiceTests {
 
   @Test
   void testExecute_blankName_throwsConstraintViolation() {
-    HelloWorldReqDTO2 req = HelloWorldReqDTO2.builder()
+    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
         .correlationId("corr-123")
         .payload(HelloWorldReqDTO2Payload.builder().name("").build())
         .build();
@@ -52,7 +52,7 @@ class HelloWorldServiceTests {
 
   @Test
   void testExecute_blankCorrelationId_throwsConstraintViolation() {
-    HelloWorldReqDTO2 req = HelloWorldReqDTO2.builder()
+    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
         .correlationId("")
         .payload(HelloWorldReqDTO2Payload.builder().name("John").build())
         .build();

@@ -2,9 +2,9 @@ package com.anasdidi.uam.controller.impl;
 
 import com.anasdidi.common.CommonConstants;
 import com.anasdidi.uam.controller.HelloWorldController;
-import com.anasdidi.uam.dto.HelloWorldReqDTO2;
-import com.anasdidi.uam.dto.HelloWorldReqDTO2.HelloWorldReqDTO2Payload;
-import com.anasdidi.uam.dto.HelloWorldResDTO2;
+import com.anasdidi.uam.dto.HelloWorldReqDTO;
+import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTO2Payload;
+import com.anasdidi.uam.dto.HelloWorldResDTO;
 import com.anasdidi.uam.service.impl.HelloWorldService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +21,8 @@ public class HelloWorldControllerV1 implements HelloWorldController {
   private final HelloWorldService helloWorldService;
 
   @Override
-  public Mono<ResponseEntity<HelloWorldResDTO2>> greeting(String correlationId, String name) {
-    var req = HelloWorldReqDTO2.builder()
+  public Mono<ResponseEntity<HelloWorldResDTO>> greeting(String correlationId, String name) {
+    var req = HelloWorldReqDTO.builder()
         .correlationId(correlationId)
         .payload(HelloWorldReqDTO2Payload.builder().name(name).build())
         .build();
