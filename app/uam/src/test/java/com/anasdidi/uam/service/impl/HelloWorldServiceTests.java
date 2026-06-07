@@ -6,9 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.anasdidi.common.enums.ResponseEnum;
-import com.anasdidi.uam.dto.HelloWorldReqDTO;
-import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTOPayload;
-import com.anasdidi.uam.dto.HelloWorldResDTO;
+import com.anasdidi.uam.dto.HelloWorldReqDTO2;
+import com.anasdidi.uam.dto.HelloWorldReqDTO2.HelloWorldReqDTO2Payload;
+import com.anasdidi.uam.dto.HelloWorldResDTO2;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,25 +22,25 @@ class HelloWorldServiceTests {
 
   @Test
   void testExecute() {
-    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
+    HelloWorldReqDTO2 req = HelloWorldReqDTO2.builder()
         .correlationId("corr-123")
-        .payload(HelloWorldReqDTOPayload.builder().name("John").build())
+        .payload(HelloWorldReqDTO2Payload.builder().name("John").build())
         .build();
 
-    HelloWorldResDTO result = helloWorldService.execute(req).block();
+    HelloWorldResDTO2 result = helloWorldService.execute(req).block();
 
     assertNotNull(result);
-    assertEquals("corr-123", result.correlationId());
-    assertEquals(ResponseEnum.S00_SUCCESS, result.response());
-    assertNotNull(result.payload());
-    assertEquals("Hi, John", result.payload().greeting());
+    assertEquals("corr-123", result.getCorrelationId());
+    assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());
+    assertNotNull(result.getPayload());
+    assertEquals("Hi, John", result.getPayload().getGreeting());
   }
 
   @Test
   void testExecute_blankName_throwsConstraintViolation() {
-    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
+    HelloWorldReqDTO2 req = HelloWorldReqDTO2.builder()
         .correlationId("corr-123")
-        .payload(HelloWorldReqDTOPayload.builder().name("").build())
+        .payload(HelloWorldReqDTO2Payload.builder().name("").build())
         .build();
 
     ConstraintViolationException ex = assertThrows(ConstraintViolationException.class, () -> {
@@ -52,9 +52,9 @@ class HelloWorldServiceTests {
 
   @Test
   void testExecute_blankCorrelationId_throwsConstraintViolation() {
-    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
+    HelloWorldReqDTO2 req = HelloWorldReqDTO2.builder()
         .correlationId("")
-        .payload(HelloWorldReqDTOPayload.builder().name("John").build())
+        .payload(HelloWorldReqDTO2Payload.builder().name("John").build())
         .build();
 
     assertThrows(ConstraintViolationException.class, () -> {

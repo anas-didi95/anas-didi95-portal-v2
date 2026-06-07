@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+	<!-- Define substitution variables BEFORE defaults.xml resolves them -->
+	<property name="LOG_CORRELATION_PATTERN"
+		value="%X{traceId}-%X{spanId}-%X{signature}\n\t" />
+
 	<!-- Include Spring Boot defaults so converters like %clr and %wEx are registered -->
 	<include
 		resource="org/springframework/boot/logging/logback/defaults.xml" />

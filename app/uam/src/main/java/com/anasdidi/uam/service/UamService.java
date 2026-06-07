@@ -1,8 +1,8 @@
 package com.anasdidi.uam.service;
 
+import com.anasdidi.common.BaseReqDTO;
+import com.anasdidi.common.BaseResDTO;
 import com.anasdidi.common.IBaseService;
-import com.anasdidi.uam.dto.IUamReqDTO;
-import com.anasdidi.uam.dto.IUamResDTO;
 
-public interface UamService<A extends IUamReqDTO, B extends IUamResDTO>
+public interface UamService<A extends BaseReqDTO, B extends BaseResDTO>
     extends IBaseService<A, B> {}
