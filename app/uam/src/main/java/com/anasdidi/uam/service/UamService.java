@@ -1,13 +1,8 @@
 package com.anasdidi.uam.service;
 
-import com.anasdidi.common.IBaseReqDTO;
-import com.anasdidi.common.IBaseResDTO;
-import jakarta.validation.Valid;
-import org.springframework.validation.annotation.Validated;
-import reactor.core.publisher.Mono;
+import com.anasdidi.common.IBaseService;
+import com.anasdidi.uam.dto.IUamReqDTO;
+import com.anasdidi.uam.dto.IUamResDTO;
 
-@Validated
-public interface UamService<A extends IBaseReqDTO, B extends IBaseResDTO> {
-
-  Mono<B> execute(@Valid A req);
-}
+public interface UamService<A extends IUamReqDTO, B extends IUamResDTO>
+    extends IBaseService<A, B> {}
