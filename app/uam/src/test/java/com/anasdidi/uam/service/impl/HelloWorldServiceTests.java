@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.anasdidi.uam.common.enums.ResponseEnum;
+import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
 import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTOPayload;
 import com.anasdidi.uam.dto.HelloWorldResDTO;

@@ -1,3 +1,3 @@
-package com.anasdidi.uam.common;
+package com.anasdidi.common;
 
 public interface IBaseResDTO {}

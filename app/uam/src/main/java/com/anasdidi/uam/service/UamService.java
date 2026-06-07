@@ -1,7 +1,7 @@
 package com.anasdidi.uam.service;
 
-import com.anasdidi.uam.common.IBaseReqDTO;
-import com.anasdidi.uam.common.IBaseResDTO;
+import com.anasdidi.common.IBaseReqDTO;
+import com.anasdidi.common.IBaseResDTO;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import reactor.core.publisher.Mono;

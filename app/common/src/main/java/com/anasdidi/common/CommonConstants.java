@@ -1,4 +1,4 @@
-package com.anasdidi.uam.common;
+package com.anasdidi.common;
 
 import lombok.experimental.UtilityClass;
 

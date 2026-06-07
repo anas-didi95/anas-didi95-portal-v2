@@ -9,7 +9,7 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>uam-common</artifactId>
+  <artifactId>common</artifactId>
 
   <dependencies>
     <dependency>

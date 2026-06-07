@@ -1,6 +1,6 @@
 package com.anasdidi.uam.controller;
 
-import com.anasdidi.uam.common.CommonConstants;
+import com.anasdidi.common.CommonConstants;
 import com.anasdidi.uam.dto.HelloWorldResDTO;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

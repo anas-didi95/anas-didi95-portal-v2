@@ -1,6 +1,6 @@
 package com.anasdidi.uam.controller.impl;
 
-import com.anasdidi.uam.common.CommonConstants;
+import com.anasdidi.common.CommonConstants;
 import com.anasdidi.uam.controller.HelloWorldController;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
 import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTOPayload;

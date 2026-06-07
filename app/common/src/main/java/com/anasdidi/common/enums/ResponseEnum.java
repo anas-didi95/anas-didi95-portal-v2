@@ -1,4 +1,4 @@
-package com.anasdidi.uam.common.enums;
+package com.anasdidi.common.enums;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

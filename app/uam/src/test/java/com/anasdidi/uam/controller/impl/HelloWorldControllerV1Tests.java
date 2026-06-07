@@ -3,7 +3,7 @@ package com.anasdidi.uam.controller.impl;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.anasdidi.uam.common.enums.ResponseEnum;
+import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
 import com.anasdidi.uam.dto.HelloWorldResDTO;
 import com.anasdidi.uam.dto.HelloWorldResDTO.HelloWorldResDTOPayload;

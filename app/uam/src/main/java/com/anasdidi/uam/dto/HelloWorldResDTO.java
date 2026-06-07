@@ -1,7 +1,7 @@
 package com.anasdidi.uam.dto;
 
-import com.anasdidi.uam.common.IBaseResDTO;
-import com.anasdidi.uam.common.enums.ResponseEnum;
+import com.anasdidi.common.IBaseResDTO;
+import com.anasdidi.common.enums.ResponseEnum;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Builder;
 
