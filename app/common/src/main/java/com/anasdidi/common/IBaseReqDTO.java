@@ -1,3 +1,6 @@
 package com.anasdidi.common;
 
-public interface IBaseReqDTO {}
+public interface IBaseReqDTO {
+
+  String correlationId();
+}

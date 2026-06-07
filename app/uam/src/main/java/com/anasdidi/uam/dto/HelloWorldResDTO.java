@@ -1,13 +1,29 @@
 package com.anasdidi.uam.dto;
 
 import com.anasdidi.common.enums.ResponseEnum;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import java.time.OffsetDateTime;
 import lombok.Builder;
 
 @Builder
 public record HelloWorldResDTO(
-    String correlationId, @JsonIgnore ResponseEnum response, HelloWorldResDTOPayload payload)
+    String correlationId,
+    Integer timeTaken,
+    OffsetDateTime timestamp,
+    String responseCode,
+    String responseDesc,
+    ResponseEnum response,
+    HelloWorldResDTOPayload payload)
     implements IUamResDTO {
+
+  @Override
+  public String responseCode() {
+    return this.response().code;
+  }
+
+  @Override
+  public String responseDesc() {
+    return this.response().message;
+  }
 
   @Builder
   public record HelloWorldResDTOPayload(String greeting) {}
