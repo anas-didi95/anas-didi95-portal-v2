@@ -1,383 +1,227 @@
-# Plan: Centralize Common Dependencies in Parent POM
+# Plan: Implement `@ExecuteTrace` AOP Logging Aspect
 
 ## Objective
 
-Move hardcoded dependency versions from child modules into the parent POM's `<dependencyManagement>` (with a Maven property) and consolidate duplicated build plugin configuration (Lombok annotation processor path) into the parent POM's `<pluginManagement>`. This ensures all dependency versions and plugin configs are managed in one place across the multi-module project.
+Implement an AOP annotation (`@ExecuteTrace`) and its corresponding aspect (`ExecuteTraceAspect`) in the `common` module so that every subclass of `IBaseService` automatically logs incoming request parameters and outgoing responses (or errors) when its `execute` method is called.
 
 ## Requirements Snapshot
 
-- **R1:** Move `org.springdoc:springdoc-openapi-starter-webflux-ui` version `3.0.2` from `uam/pom.xml` into parent POM `<dependencyManagement>` with a `${springdoc.version}` property.
-- **R2:** Consolidate the duplicated Lombok `annotationProcessorPaths` config from `common/pom.xml` and `uam/pom.xml` into parent POM `<pluginManagement>` so child modules inherit it without repeating it.
+- **R1:** Define `@ExecuteTrace` as a runtime-retained, method-level annotation.
+- **R2:** Create `ExecuteTraceAspect` as a Spring `@Aspect @Component` that intercepts `@ExecuteTrace`-annotated methods.
+- **R3:** Log incoming request parameter **before** execution and outgoing response (or error) **after** execution.
+- **R4:** The aspect must work with reactive types (`Mono<B>`) — log on `Mono` completion/error, not just at method-entry time.
+- **R5:** No changes to `IBaseService.java` — it already has `@ExecuteTrace` on the `execute` method.
+- **R6:** Add required AOP dependency to `common/pom.xml`.
+- **R7:** The change must compile and all existing tests must pass after the change.
 
 ## Scope
 
-- **In scope:**
-  - Add `<springdoc.version>` property to `app/pom.xml`.
-  - Add `org.springdoc:springdoc-openapi-starter-webflux-ui` entry to parent `<dependencyManagement>` referencing `${springdoc.version}`.
-  - Remove inline `<version>3.0.2</version>` from `uam/pom.xml` for the springdoc dependency.
-  - Add `maven-compiler-plugin` with Lombok annotation processor config to parent `<pluginManagement>`.
-  - Remove the explicit `maven-compiler-plugin` / `annotationProcessorPaths` block from `common/pom.xml` (now inherited).
-  - Remove the explicit `maven-compiler-plugin` / `annotationProcessorPaths` block from `uam/pom.xml` (now inherited).
-  - Run full build verification (`./mvnw clean verify`).
-
-- **Out of scope:**
-  - No changes to any other dependencies (all other versions are already managed by Spring Boot BOM).
-  - No changes to business logic, source code, or tests.
-  - No changes to Spotless or other existing parent POM configurations.
-  - No changes to plugin versions (already managed by Spring Boot BOM for `maven-compiler-plugin`).
+- Update `ExecuteTrace.java` with proper retention/target meta-annotations.
+- Rewrite `ExecuteTraceAspect.java` with correct class name and full aspect logic.
+- Add `spring-boot-starter-aop` to `common/pom.xml`.
+- Verify compilation and full test suite passes.
+- **Out of scope:** Adding new tests for the aspect itself (but validation against existing tests is required).
 
 ## Assumptions and Constraints
 
-- Parent POM already inherits `spring-boot-starter-parent:4.0.6`, which manages `maven-compiler-plugin` version.
-- `common/pom.xml` and `uam/pom.xml` both currently declare their own `maven-compiler-plugin` with Lombok `annotationProcessorPaths`.
-- The `uam/pom.xml` has a separate `<execution>` block (default-compile and default-testCompile) for the annotation processor — this must be preserved exactly in form, only moved to parent `<pluginManagement>`.
-- `common/pom.xml` has a simpler single `<configuration><annotationProcessorPaths>` block.
-- After consolidation, a child module only needs `<plugin>` declaration (no config body) to inherit the annotation processor setup, **unless** it needs to override any config (none do).
+- The `common` module is a library JAR; the aspect will be picked up by Spring component scanning in `uam` because `@SpringBootApplication` scans `com.anasdidi` packages (including `com.anasdidi.common`).
+- `IBaseService` already has `@ExecuteTrace` on the `execute` method — no change needed there.
+- No `@EnableAspectJAutoProxy` is needed explicitly — `spring-boot-starter-aop` auto-configures it in Spring Boot.
+- The project uses GOOGLE style formatting via Spotless — run `spotless:apply` after all edits.
+- SLF4J + Lombok `@Slf4j` is the logging approach (Lombok is already a dependency in `common`).
 
 ## Risks and Areas Requiring Care
 
-- **Execution ID conflicts:** The parent `<pluginManagement>` `maven-compiler-plugin` config must include the `executions` block. If `uam/pom.xml` only declares `<plugin><artifactId>maven-compiler-plugin</artifactId></plugin>` (empty), it will inherit the parent's executions. Verify this.
-- **`common` module does NOT have executions** — its annotation processor is a simple `<configuration>` block. The parent config must use the `executions` structure (to satisfy `uam`), and `common` must verify it inherits correctly.
-- **Pre-existing plan.md:** The file will be overwritten with this new plan. That is intentional — the old multi-module refactor plan is complete.
-- **Spring Boot 4.x:** The `maven-compiler-plugin` is managed by `spring-boot-starter-parent` — no version needed in `<pluginManagement>`.
+- The `ExecuteTraceAspect.java` file currently has class name `ExecuteTraceLog` (a stub) — the file must be **rewritten entirely**, not patched.
+- The AOP must work with reactive `Mono` returns — naive `@Around` that logs after `proceed()` would log the `Mono` object, not the actual response. The aspect must wrap/transform the `Mono`.
+- The `HelloWorldServiceTests` are `@SpringBootTest` and will load the full context — the aspect will be active during tests. The tests must still pass (the aspect should not break existing behavior).
+- The `HelloWorldControllerV1Tests` use `@WebFluxTest` with a `@TestConfiguration` that mocks the service — the aspect will NOT be active there (no `@SpringBootTest`), but that's fine.
 
 ## Core Concepts
 
-### How `<pluginManagement>` Consolidation Works
+### Reactive AOP with Mono
 
-**Before** — each child declares its own plugin config:
+When the target method returns `Mono<B>`, a naive `@Around` aspect that does:
 
-```xml
-<!-- common/pom.xml -->
-<build>
-  <plugins>
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-compiler-plugin</artifactId>
-      <configuration>
-        <annotationProcessorPaths>
-          <path>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-          </path>
-        </annotationProcessorPaths>
-      </configuration>
-    </plugin>
-  </plugins>
-</build>
+```java
+Object result = pjp.proceed();
+log.info("Response: {}", result); // Logs Mono object, not the actual value!
+return result;
 ```
 
-```xml
-<!-- uam/pom.xml -->
-<build>
-  <plugins>
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-compiler-plugin</artifactId>
-      <executions>
-        <execution>
-          <id>default-compile</id>
-          <goals><goal>compile</goal></goals>
-          <phase>compile</phase>
-          <configuration>
-            <annotationProcessorPaths>
-              <path>
-                <groupId>org.projectlombok</groupId>
-                <artifactId>lombok</artifactId>
-              </path>
-            </annotationProcessorPaths>
-          </configuration>
-        </execution>
-        <execution>
-          <id>default-testCompile</id>
-          <goals><goal>testCompile</goal></goals>
-          <phase>test-compile</phase>
-          <configuration>
-            <annotationProcessorPaths>
-              <path>
-                <groupId>org.projectlombok</groupId>
-                <artifactId>lombok</artifactId>
-              </path>
-            </annotationProcessorPaths>
-          </configuration>
-        </execution>
-      </executions>
-    </plugin>
-  </plugins>
-</build>
+would log the `Mono` wrapper, not the resolved value. Instead, the aspect must transform the `Mono`:
+
+```java
+@Around("@annotation(com.anasdidi.common.aspect.ExecuteTrace)")
+public Object trace(ProceedingJoinPoint pjp) throws Throwable {
+    // Log request
+    Object[] args = pjp.getArgs();
+    log.info("Request: {}", args);
+
+    Mono<?> result = (Mono<?>) pjp.proceed();
+    return result
+        .doOnSuccess(res -> log.info("Response: {}", res))
+        .doOnError(err -> log.error("Error: {}", err.getMessage()));
+}
 ```
 
-**After** — parent `<pluginManagement>` contains the full config; children declare only the plugin reference:
-
-```xml
-<!-- parent pom.xml — in <pluginManagement> -->
-<plugin>
-  <groupId>org.apache.maven.plugins</groupId>
-  <artifactId>maven-compiler-plugin</artifactId>
-  <executions>
-    <execution>
-      <id>default-compile</id>
-      <goals><goal>compile</goal></goals>
-      <phase>compile</phase>
-      <configuration>
-        <annotationProcessorPaths>
-          <path>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-          </path>
-        </annotationProcessorPaths>
-      </configuration>
-    </execution>
-    <execution>
-      <id>default-testCompile</id>
-      <goals><goal>testCompile</goal></goals>
-      <phase>test-compile</phase>
-      <configuration>
-        <annotationProcessorPaths>
-          <path>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-          </path>
-        </annotationProcessorPaths>
-      </configuration>
-    </execution>
-  </executions>
-</plugin>
-```
-
-```xml
-<!-- common/pom.xml — simplified -->
-<build>
-  <plugins>
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-compiler-plugin</artifactId>
-    </plugin>
-  </plugins>
-</build>
-```
-
-```xml
-<!-- uam/pom.xml — simplified -->
-<build>
-  <plugins>
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-compiler-plugin</artifactId>
-    </plugin>
-  </plugins>
-</build>
-```
-
-**Important subtlety:** The parent config uses an `executions` block. For `common`, which previously had only a `<configuration>` block (no `<executions>`), the inherited executions will apply the annotation processor to both compile and testCompile phases automatically. This is **strictly better** — previously, `common` didn't explicitly configure annotation processing for testCompile, which was a latent gap. This is safe because `common` has no tests yet; adding annotation processing for testCompile has no negative effect.
-
-### How `dependencyManagement` Works
-
-**Before in `uam/pom.xml`:**
-```xml
-<dependency>
-  <groupId>org.springdoc</groupId>
-  <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
-  <version>3.0.2</version>
-</dependency>
-```
-
-**After in `app/pom.xml` `<dependencyManagement>`:**
-```xml
-<dependency>
-  <groupId>org.springdoc</groupId>
-  <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
-  <version>${springdoc.version}</version>
-</dependency>
-```
-
-**After in `uam/pom.xml`:**
-```xml
-<dependency>
-  <groupId>org.springdoc</groupId>
-  <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
-</dependency>
-```
+This logs the request immediately (before the method body executes), and logs the response or error when the `Mono` actually completes.
 
 ## Sub-Tasks
 
-### Sub-Task 1: Add springdoc version property and managed dependency to parent POM
+### Sub-Task 1: Add `spring-boot-starter-aop` dependency to `common/pom.xml`
 
-- **Status:** Pending
-- **Objective:** Add `<springdoc.version>` property and `org.springdoc` entry to parent `<dependencyManagement>`.
-- **Related Requirements:** R1
-- **Dependencies and Preconditions:** Parent POM exists at `app/pom.xml` (already does).
-- **In Scope for This Sub-Task:**
-  - Add `<springdoc.version>3.0.2</springdoc.version>` to `<properties>` in `app/pom.xml`.
-  - Add `<dependency>` for `org.springdoc:springdoc-openapi-starter-webflux-ui` inside parent `<dependencyManagement>` with version `${springdoc.version}`.
-- **Out of Scope for This Sub-Task:**
-  - No changes to any child POM (done in Sub-Task 2).
-  - No other property additions.
+- **Status:** Completed
+- **Objective:** Add the Spring Boot AOP starter so `@Aspect`, `@Around`, `ProceedingJoinPoint`, etc. are available at compile time and AOP auto-configuration activates at runtime.
+- **Related Requirements:** R2, R6
+- **Dependencies and Preconditions:** None.
+- **In Scope:**
+  - Add `<groupId>org.springframework.boot</groupId>` / `<artifactId>spring-boot-starter-aop</artifactId>` to the `<dependencies>` section of `common/pom.xml`.
+  - This is **not** marked `optional` — consumers (uam) need it transitively.
+- **Out of Scope:** No changes to `uam/pom.xml`.
 - **Instructions:**
-  - Edit `/home/vscode/workspace/app/pom.xml`.
-  - Insert the property and the managed dependency entry.
-- **Acceptance Criteria:**
-  - `./mvnw validate` from `app/` succeeds.
-- **Implementation Suggestions:**
-  ```xml
-  <!-- Within <properties> block, add: -->
-  <springdoc.version>3.0.2</springdoc.version>
-
-  <!-- Within <dependencyManagement><dependencies>, after the common entry, add: -->
-  <dependency>
-    <groupId>org.springdoc</groupId>
-    <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
-    <version>${springdoc.version}</version>
-  </dependency>
+  1. Read `common/pom.xml`.
+  2. Insert the `spring-boot-starter-aop` dependency after the existing `spring-boot-starter-webflux` entry.
+- **Acceptance Criteria:** `./mvnw compile -pl common` succeeds.
+- **Cautionary Points:** The Spring Boot parent POM (`4.0.6`) manages the version — no `<version>` tag needed.
+- **Implementation Suggestions:** Place it right after the `spring-boot-starter-webflux` entry in the dependencies list.
+- **Testing Suggestions:**
+  ```bash
+  ./mvnw compile -pl common
   ```
-- **Cautionary Points:**
-  - Spring Boot does NOT manage `springdoc`, so the version must be explicitly set in `<dependencyManagement>`. Currently it's in the child; this sub-task just moves it to the parent.
-- **Testing Suggestions:** Run `./mvnw validate -pl uam -am` from `app/`.
+- **Done When:** `common/pom.xml` has the `spring-boot-starter-aop` dependency and compiles cleanly.
 
-### Sub-Task 2: Remove inline springdoc version from `uam/pom.xml`
+### Sub-Task 2: Update `ExecuteTrace.java` with proper annotation meta-annotations
 
-- **Status:** Pending
-- **Objective:** Remove the hardcoded `version` from the `springdoc` dependency in `uam/pom.xml` so it is inherited from parent `<dependencyManagement>`.
+- **Status:** Completed
+- **Objective:** Make `@ExecuteTrace` a runtime-retained, method-level annotation so the aspect can intercept it.
 - **Related Requirements:** R1
-- **Dependencies and Preconditions:** Sub-Task 1 (parent must manage the version).
-- **In Scope for This Sub-Task:**
-  - Remove `<version>3.0.2</version>` from the `org.springdoc:springdoc-openapi-starter-webflux-ui` dependency entry in `uam/pom.xml`.
-- **Out of Scope for This Sub-Task:**
-  - No other changes to `uam/pom.xml`.
+- **Dependencies and Preconditions:** None.
+- **In Scope:**
+  - Add `@Retention(RetentionPolicy.RUNTIME)` — required by Spring AOP to detect the annotation at runtime.
+  - Add `@Target(ElementType.METHOD)` — restricts to method-level usage.
+  - Keep the `package` and `public @interface ExecuteTrace` declaration.
+- **Out of Scope:** No other meta-annotations (e.g., `@Documented`, `@Inherited`) unless they add value.
 - **Instructions:**
-  - Edit `/home/vscode/workspace/app/uam/pom.xml`.
-  - Remove the `<version>3.0.2</version>` line from the springdoc dependency block.
-- **Acceptance Criteria:**
-  - The springdoc dependency in `uam/pom.xml` has no `<version>` child.
-  - `./mvnw compile -pl uam -am` succeeds from `app/`.
-- **Testing Suggestions:** Run `./mvnw compile -pl uam -am` from `app/`.
+  1. Read the current `ExecuteTrace.java`.
+  2. Add the two meta-annotation imports and annotations.
+- **Acceptance Criteria:** The annotation compiles and can be intercepted by `@Around("@annotation(ExecuteTrace)")`.
+- **Implementation Suggestions:**
+  ```java
+  package com.anasdidi.common.aspect;
+  
+  import java.lang.annotation.ElementType;
+  import java.lang.annotation.Retention;
+  import java.lang.annotation.RetentionPolicy;
+  import java.lang.annotation.Target;
+  
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.METHOD)
+  public @interface ExecuteTrace {}
+  ```
+- **Testing Suggestions:** `./mvnw compile -pl common` succeeds.
+- **Done When:** `ExecuteTrace.java` has `@Retention(RUNTIME)` and `@Target(METHOD)` and compiles.
 
-### Sub-Task 3: Consolidate Lombok annotation processor config into parent `<pluginManagement>`
+### Sub-Task 3: Rewrite `ExecuteTraceAspect.java` with full aspect logic
 
-- **Status:** Pending
-- **Objective:** Move the duplicated `maven-compiler-plugin` annotation processor configuration from `common/pom.xml` and `uam/pom.xml` into the parent POM's `<pluginManagement>` so both modules inherit it.
-- **Related Requirements:** R2
-- **Dependencies and Preconditions:** Sub-Tasks 1–2 (can run in parallel, but order doesn't matter).
-- **In Scope for This Sub-Task:**
-  - Add `maven-compiler-plugin` with `executions` for `default-compile` and `default-testCompile`, each with Lombok `annotationProcessorPaths`, to parent POM's `<pluginManagement>` section.
-  - Replace the explicit `maven-compiler-plugin` block in `common/pom.xml` with a minimal `<plugin>` reference (no `<configuration>`, no `<executions>`).
-  - Replace the explicit `maven-compiler-plugin` block in `uam/pom.xml` with a minimal `<plugin>` reference (no `<configuration>`, no `<executions>`).
-- **Out of Scope for This Sub-Task:**
-  - No changes to `spring-boot-maven-plugin` or any other plugin.
-  - No changes to Spotless plugin.
+- **Status:** Completed
+- **Objective:** Create a Spring `@Aspect @Component` that intercepts `@ExecuteTrace`, logs the incoming request arguments, proceeds with the call, and logs the response/error from the reactive `Mono`.
+- **Related Requirements:** R2, R3, R4
+- **Dependencies and Preconditions:** Sub-Task 1 and Sub-Task 2 must be done (AOP dependency + annotation fixed).
+- **In Scope:**
+  - Change class name from `ExecuteTraceLog` to `ExecuteTraceAspect`.
+  - Add `@Aspect` and `@Component` class-level annotations.
+  - Add `@Slf4j` from Lombok for logging.
+  - Implement `@Around("@annotation(com.anasdidi.common.aspect.ExecuteTrace)")` advice.
+  - Log request parameters with `log.info("Request: {}", args)`.
+  - Cast the `proceed()` result to `Mono<?>`.
+  - Use `.doOnSuccess()` to log the response.
+  - Use `.doOnError()` to log errors.
+  - Return the transformed `Mono`.
+- **Out of Scope:**
+  - Do NOT add method-level validation or exception handling — that's the service's job.
+  - Do NOT log sensitive fields (the DTO's own `toString()` controls what is exposed).
 - **Instructions:**
-  - **Step 1:** Edit `/home/vscode/workspace/app/pom.xml`. In `<pluginManagement><plugins>` (inside `<build>`), add the `maven-compiler-plugin` entry with both executions (`default-compile` and `default-testCompile`) containing the Lombok annotation processor path.
-  - **Step 2:** Edit `/home/vscode/workspace/app/common/pom.xml`. Replace the full `maven-compiler-plugin` block with just:
-    ```xml
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-compiler-plugin</artifactId>
-    </plugin>
-    ```
-  - **Step 3:** Edit `/home/vscode/workspace/app/uam/pom.xml`. Replace the full `maven-compiler-plugin` block with just:
-    ```xml
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-compiler-plugin</artifactId>
-    </plugin>
-    ```
-  - Verify with compilation.
+  1. Read the current `ExecuteTraceAspect.java`.
+  2. Replace the entire content with a proper aspect implementation.
 - **Acceptance Criteria:**
-  - Parent POM's `<pluginManagement>` contains `maven-compiler-plugin` with both Lombok executions.
-  - `common/pom.xml` has only a bare `<plugin>` reference for `maven-compiler-plugin`.
-  - `uam/pom.xml` has only a bare `<plugin>` reference for `maven-compiler-plugin`.
-  - `./mvnw compile -pl common` succeeds (Lombok annotation processing works for common).
-  - `./mvnw compile -pl uam -am` succeeds (Lombok annotation processing works for uam).
-- **Cautionary Points:**
-  - The `uam/pom.xml` executions explicitly set `id=default-compile` and `id=default-testCompile`, which override the plugin's default bindings. When moved to parent `<pluginManagement>`, they must remain as `executions` (not a bare `<configuration>`) to apply correctly to both phases.
-  - For `common`, which previously had only a `<configuration>` block (no executions), the inherited executions will now apply Lombok to both compile and testCompile. This may cause Spotless format check to flag the POM after `sortPom` reformats it.
-- **Implementation Suggestion for `app/pom.xml` `<pluginManagement>` addition:**
-  ```xml
-  <plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-compiler-plugin</artifactId>
-    <executions>
-      <execution>
-        <id>default-compile</id>
-        <goals><goal>compile</goal></goals>
-        <phase>compile</phase>
-        <configuration>
-          <annotationProcessorPaths>
-            <path>
-              <groupId>org.projectlombok</groupId>
-              <artifactId>lombok</artifactId>
-            </path>
-          </annotationProcessorPaths>
-        </configuration>
-      </execution>
-      <execution>
-        <id>default-testCompile</id>
-        <goals><goal>testCompile</goal></goals>
-        <phase>test-compile</phase>
-        <configuration>
-          <annotationProcessorPaths>
-            <path>
-              <groupId>org.projectlombok</groupId>
-              <artifactId>lombok</artifactId>
-            </path>
-          </annotationProcessorPaths>
-        </configuration>
-      </execution>
-    </executions>
-  </plugin>
+  - Compiles with `./mvnw compile -pl common`.
+  - Full build succeeds: `./mvnw verify -pl uam -am`.
+  - Existing tests pass.
+- **Implementation Suggestions:**
+  ```java
+  package com.anasdidi.common.aspect;
+  
+  import lombok.extern.slf4j.Slf4j;
+  import org.aspectj.lang.ProceedingJoinPoint;
+  import org.aspectj.lang.annotation.Around;
+  import org.aspectj.lang.annotation.Aspect;
+  import org.springframework.stereotype.Component;
+  import reactor.core.publisher.Mono;
+  
+  @Slf4j
+  @Aspect
+  @Component
+  public class ExecuteTraceAspect {
+  
+    @Around("@annotation(com.anasdidi.common.aspect.ExecuteTrace)")
+    public Object traceExecution(ProceedingJoinPoint joinPoint) throws Throwable {
+      Object[] args = joinPoint.getArgs();
+      log.info("Request: {}", args);
+  
+      Mono<?> result = (Mono<?>) joinPoint.proceed();
+  
+      return result
+          .doOnSuccess(res -> log.info("Response: {}", res))
+          .doOnError(err -> log.error("Execution error", err));
+    }
+  }
   ```
 - **Testing Suggestions:**
   ```bash
-  cd /home/vscode/workspace/app
-  ./mvnw compile -pl common
-  ./mvnw compile -pl uam -am
-  ./mvnw test -pl uam -am
-  ./mvnw spotless:check
+  ./mvnw compile -pl common                    # Compile common
+  ./mvnw test -pl uam -am                      # Run all uam tests (aspect should be active for service tests)
   ```
+- **Done When:** The aspect rewrites `ExecuteTraceAspect.java`, compiles, and all existing tests in `uam` pass.
 
-### Sub-Task 4: Final integration verification
+### Sub-Task 4: Apply Spotless formatting and verify full pipeline
 
-- **Status:** Pending
-- **Objective:** Run the full build pipeline to verify everything works end-to-end after all changes.
-- **Related Requirements:** R1, R2
-- **Dependencies and Preconditions:** Sub-Tasks 1, 2, and 3 completed.
-- **In Scope for This Sub-Task:**
-  - Run `./mvnw clean compile -pl common` from `app/`.
-  - Run `./mvnw compile -pl uam -am` from `app/`.
-  - Run `./mvnw test -pl uam -am` from `app/`.
-  - Run `./mvnw spotless:check` from `app/`.
-  - Run `./mvnw clean verify` from `app/` for full pipeline.
-- **Out of Scope for This Sub-Task:**
-  - No code changes.
-- **Acceptance Criteria:**
-  - Full build: compilation, all tests, and format checks pass.
-  - Spotless/`sortPom` has sorted all POM files correctly (format check passes).
-  - The `springdoc` artifact resolves correctly at the managed version.
-  - Lombok annotations are processed correctly in both modules (verified by compilation).
+- **Status:** Completed
+- **Objective:** Ensure all changed files conform to the project's formatting standards, and the full build pipeline passes.
+- **Related Requirements:** R7
+- **Dependencies and Preconditions:** Sub-Tasks 1, 2, and 3 complete.
+- **In Scope:**
+  - Run `./mvnw spotless:apply` to auto-format all changed files.
+  - Run `./mvnw verify` to run Spotless check + compilation + tests.
+- **Out of Scope:** No further source code changes.
+- **Instructions:**
+  1. Run `./mvnw spotless:apply`.
+  2. Run `./mvnw verify`.
+- **Acceptance Criteria:** `./mvnw verify` exits with `BUILD SUCCESS`.
+- **Cautionary Points:** Spotless `check` runs during `verify` phase — must `apply` first or `verify` will fail if formatting is off.
+- **Testing Suggestions:**
+  ```bash
+  ./mvnw spotless:apply && ./mvnw verify
+  ```
+- **Done When:** Full `verify` passes with no formatting violations and all tests green.
 
 ## Final Integration & Verification
 
-- **System-Wide Test:**
+- **System-Wide Test:** After all sub-tasks, run:
   ```bash
-  cd /home/vscode/workspace/app
   ./mvnw clean verify
   ```
-  Expected: BUILD SUCCESS, all tests pass, spotless check passes for all modules.
+  This compiles both modules, runs Spotless check, and runs all tests.
 
 - **Completion Checklist:**
-  - [ ] `app/pom.xml` has `<springdoc.version>3.0.2</springdoc.version>` property.
-  - [ ] `app/pom.xml` has `org.springdoc:springdoc-openapi-starter-webflux-ui` in `<dependencyManagement>`.
-  - [ ] `app/pom.xml` has `maven-compiler-plugin` with Lombok executions in `<pluginManagement>`.
-  - [ ] `common/pom.xml` springdoc dependency has no `<version>` (only in parent management).
-  - [ ] `uam/pom.xml` springdoc dependency has no `<version>` (only in parent management).
-  - [ ] `common/pom.xml` has a bare `<plugin>` for `maven-compiler-plugin` (no config).
-  - [ ] `uam/pom.xml` has a bare `<plugin>` for `maven-compiler-plugin` (no config).
-  - [ ] `./mvnw compile -pl common` succeeds.
-  - [ ] `./mvnw compile -pl uam -am` succeeds.
-  - [ ] `./mvnw test -pl uam -am` succeeds.
-  - [ ] `./mvnw spotless:check` passes.
-  - [ ] `./mvnw clean verify` passes (BUILD SUCCESS).
+  - [x] `common/pom.xml` has `spring-boot-starter-aspectj` added (Spring Boot 4.x name).
+  - [x] `ExecuteTrace.java` has `@Retention(RUNTIME)` and `@Target(METHOD)` (pre-existing).
+  - [x] `ExecuteTraceAspect.java` rewritten with `@Aspect`, `@Component`, `@Around`, reactive-aware logging, `Arrays.toString()`, `instanceof` guard, method signature in logs.
+  - [x] `UamApplication.java` updated with `scanBasePackages = "com.anasdidi"` (fix P0 component scan gap).
+  - [x] `IBaseService.java` unchanged (already has `@ExecuteTrace`).
+  - [x] `./mvnw clean verify` passes (6/6 tests, Spotless clean).
+  - [x] No manual formatting — cleaned by `spotless:apply`.
 
 ## Open Questions
 
-- None. The scope and approach are well-defined from the dependency scan results.
+- None.
