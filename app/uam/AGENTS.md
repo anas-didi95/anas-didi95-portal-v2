@@ -4,9 +4,9 @@ See the root [`/home/vscode/workspace/AGENTS.md`](../../AGENTS.md) for full repo
 
 ## Module-specific notes
 
-- This is the Spring Boot application module. It depends on `common` (`com.anasdidi.common.*`).
+- **Spring Boot application** module. Depends on `common` (`com.anasdidi.common.*`).
+- **Entrypoint**: `com.anasdidi.uam.UamApplication` with `scanBasePackages = "com.anasdidi"` (picks up `common` aspects).
 - Controllers, services, and DTOs live under `com.anasdidi.uam.*`.
-- **Current entrypoint**: `com.anasdidi.uam.UamApplication`.
-- **Do not use** `app/uam/mvnw` — the canonical wrapper is at `app/mvnw`.
-- Liquibase changelogs dir (`src/main/resources/db/changelog/`) is **empty**.
-- Logback writes to `./logs/` (gitignored).
+- **Do not use** `app/uam/mvnw` — the canonical wrapper is `app/mvnw`.
+- Liquibase changelogs dir (`src/main/resources/db/changelog/`) is **empty** — no DB migrations exist yet.
+- Logback writes to `./logs/` (gitignored via root `.gitignore`).

@@ -4,8 +4,8 @@ See the root [`/home/vscode/workspace/AGENTS.md`](../../AGENTS.md) for full repo
 
 ## Module-specific notes
 
-- This is a **library JAR** (no main class, not runnable). It is consumed by `uam`.
+- **Library JAR** (no main class, not runnable). Consumed by `uam`.
 - All classes live under `com.anasdidi.common.*`.
-- Depends only on `spring-web` + Lombok (both marked optional/compile-only; no transitive impact on consumers).
+- Dependencies: `spring-boot-starter-webflux`, `spring-boot-starter-aspectj`, `springdoc-openapi-starter-webflux-ui`, Lombok (optional).
 - A change here requires rebuilding `uam` to pick it up: `./mvnw compile -pl uam -am`.
-- **No tests exist yet** — `src/test/` directory does not exist; any new code in common must be tested from scratch.
+- **No tests exist yet** — `src/test/` directory does not exist; any new code must be tested from scratch.
