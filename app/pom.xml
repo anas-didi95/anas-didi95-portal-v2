@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.0.6</version>
+    <relativePath></relativePath>
+  </parent>
+
+  <groupId>com.anasdidi</groupId>
+  <artifactId>app</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <modules>
+    <module>common</module>
+    <module>uam</module>
+  </modules>
+
+  <properties>
+    <java.version>25</java.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.anasdidi</groupId>
+        <artifactId>uam-common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+    <plugins>
+      <!--
+        Code formatting with Spotless (inherited by all modules):
+          mvn spotless:check   - verify formatting (also runs during verify phase)
+          mvn spotless:apply   - auto-format all files
+        Uses palantirJavaFormat with style=GOOGLE (4-space indent), 2-space for POM,
+        and Eclipse WTP (4.21.0) for XML resource files.
+      -->
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>2.44.3</version>
+        <configuration>
+          <java>
+            <palantirJavaFormat>
+              <version>2.89.0</version>
+              <style>GOOGLE</style>
+            </palantirJavaFormat>
+            <formatAnnotations></formatAnnotations>
+            <removeUnusedImports></removeUnusedImports>
+          </java>
+          <pom>
+            <sortPom>
+              <nrOfIndentSpace>2</nrOfIndentSpace>
+            </sortPom>
+          </pom>
+          <formats>
+            <format>
+              <includes>
+                <include>src/**/resources/**/*.xml</include>
+                <include>src/**/resources/**/*.xsd</include>
+              </includes>
+              <eclipseWtp>
+                <type>XML</type>
+                <version>4.21.0</version>
+              </eclipseWtp>
+            </format>
+          </formats>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>verify</phase>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
