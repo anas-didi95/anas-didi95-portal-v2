@@ -15,14 +15,14 @@ import lombok.extern.jackson.Jacksonized;
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 public class HelloWorldResDTO extends BaseResDTO {
-  private HelloWorldResDTO2Payload payload;
+  private HelloWorldResDTOPayload payload;
 
   @Data
   @SuperBuilder
   @Jacksonized
   @JsonIgnoreProperties(ignoreUnknown = true)
   @ToString(callSuper = true)
-  public static class HelloWorldResDTO2Payload {
+  public static class HelloWorldResDTOPayload {
     private String greeting;
   }
 }

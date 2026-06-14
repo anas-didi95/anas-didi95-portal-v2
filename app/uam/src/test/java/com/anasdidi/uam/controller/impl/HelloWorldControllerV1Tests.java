@@ -6,7 +6,7 @@ import static org.mockito.Mockito.when;
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
 import com.anasdidi.uam.dto.HelloWorldResDTO;
-import com.anasdidi.uam.dto.HelloWorldResDTO.HelloWorldResDTO2Payload;
+import com.anasdidi.uam.dto.HelloWorldResDTO.HelloWorldResDTOPayload;
 import com.anasdidi.uam.service.impl.HelloWorldService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,7 @@ class HelloWorldControllerV1Tests {
     var mockResponse = HelloWorldResDTO.builder()
         .correlationId(CORRELATION_ID)
         .response(ResponseEnum.S00_SUCCESS)
-        .payload(HelloWorldResDTO2Payload.builder().greeting("Hi, John").build())
+        .payload(HelloWorldResDTOPayload.builder().greeting("Hi, John").build())
         .build();
 
     when(helloWorldService.execute(any(HelloWorldReqDTO.class)))

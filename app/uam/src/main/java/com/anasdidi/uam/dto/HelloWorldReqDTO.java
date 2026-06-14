@@ -18,14 +18,14 @@ import lombok.extern.jackson.Jacksonized;
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 public class HelloWorldReqDTO extends BaseReqDTO {
-  @Valid @NonNull private HelloWorldReqDTO2Payload payload;
+  @Valid @NonNull private HelloWorldReqDTOPayload payload;
 
   @Data
   @SuperBuilder
   @Jacksonized
   @JsonIgnoreProperties(ignoreUnknown = true)
   @ToString(callSuper = true)
-  public static class HelloWorldReqDTO2Payload {
+  public static class HelloWorldReqDTOPayload {
     @NotBlank private String name;
   }
 }

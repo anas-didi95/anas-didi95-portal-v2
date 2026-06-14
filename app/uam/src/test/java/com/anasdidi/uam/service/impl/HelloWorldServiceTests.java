@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
-import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTO2Payload;
+import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTOPayload;
 import com.anasdidi.uam.dto.HelloWorldResDTO;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -24,7 +24,7 @@ class HelloWorldServiceTests {
   void testExecute() {
     HelloWorldReqDTO req = HelloWorldReqDTO.builder()
         .correlationId("corr-123")
-        .payload(HelloWorldReqDTO2Payload.builder().name("John").build())
+        .payload(HelloWorldReqDTOPayload.builder().name("John").build())
         .build();
 
     HelloWorldResDTO result = helloWorldService.execute(req).block();
@@ -40,7 +40,7 @@ class HelloWorldServiceTests {
   void testExecute_blankName_throwsConstraintViolation() {
     HelloWorldReqDTO req = HelloWorldReqDTO.builder()
         .correlationId("corr-123")
-        .payload(HelloWorldReqDTO2Payload.builder().name("").build())
+        .payload(HelloWorldReqDTOPayload.builder().name("").build())
         .build();
 
     ConstraintViolationException ex = assertThrows(ConstraintViolationException.class, () -> {
@@ -54,7 +54,7 @@ class HelloWorldServiceTests {
   void testExecute_blankCorrelationId_throwsConstraintViolation() {
     HelloWorldReqDTO req = HelloWorldReqDTO.builder()
         .correlationId("")
-        .payload(HelloWorldReqDTO2Payload.builder().name("John").build())
+        .payload(HelloWorldReqDTOPayload.builder().name("John").build())
         .build();
 
     assertThrows(ConstraintViolationException.class, () -> {
