@@ -9,4 +9,4 @@ See the root [`/home/vscode/workspace/AGENTS.md`](../../AGENTS.md) for full repo
 - Controllers, services, and DTOs live under `com.anasdidi.uam.*`.
 - **Do not use** `app/uam/mvnw` — the canonical wrapper is `app/mvnw`.
 - Liquibase changelogs dir (`src/main/resources/db/changelog/`) is **empty** — no DB migrations exist yet.
-- Logback writes to `./logs/` (gitignored via root `.gitignore`).
+- Logback writes to `./logs/` (relative to `app/uam`), gitignored via root `.gitignore`.
