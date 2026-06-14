@@ -8,26 +8,22 @@ import com.anasdidi.uam.service.UamService;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
-import reactor.core.publisher.Mono;
 
 @Service
 @Validated
 public class HelloWorldService implements UamService<HelloWorldReqDTO, HelloWorldResDTO> {
 
   @Override
-  public Mono<HelloWorldResDTO> execute(@Valid HelloWorldReqDTO req) {
-    var in = Mono.just(req);
-    var greeting = in.flatMap(this::prepareGreeting);
-    var tuple = Mono.zip(in, greeting);
-
-    return tuple.map(t -> HelloWorldResDTO.builder()
-        .correlationId(t.getT1().getCorrelationId())
+  public HelloWorldResDTO execute(@Valid HelloWorldReqDTO req) {
+    var greeting = prepareGreeting(req);
+    return HelloWorldResDTO.builder()
+        .correlationId(req.getCorrelationId())
         .response(ResponseEnum.S00_SUCCESS)
-        .payload(HelloWorldResDTOPayload.builder().greeting(t.getT2()).build())
-        .build());
+        .payload(HelloWorldResDTOPayload.builder().greeting(greeting).build())
+        .build();
   }
 
-  private Mono<String> prepareGreeting(HelloWorldReqDTO in) {
-    return Mono.just("Hi, %s".formatted(in.getPayload().getName()));
+  private String prepareGreeting(HelloWorldReqDTO in) {
+    return "Hi, %s".formatted(in.getPayload().getName());
   }
 }

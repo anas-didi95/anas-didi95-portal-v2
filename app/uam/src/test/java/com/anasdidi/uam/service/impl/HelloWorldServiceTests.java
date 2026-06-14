@@ -3,7 +3,6 @@ package com.anasdidi.uam.service.impl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
@@ -21,44 +20,42 @@ class HelloWorldServiceTests {
   private HelloWorldService helloWorldService;
 
   @Test
-  void testExecute() {
-    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
+  void testGreeting() {
+    var req = HelloWorldReqDTO.builder()
         .correlationId("corr-123")
         .payload(HelloWorldReqDTOPayload.builder().name("John").build())
         .build();
 
-    HelloWorldResDTO result = helloWorldService.execute(req).block();
+    HelloWorldResDTO result = helloWorldService.execute(req);
 
     assertNotNull(result);
     assertEquals("corr-123", result.getCorrelationId());
-    assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());
-    assertNotNull(result.getPayload());
     assertEquals("Hi, John", result.getPayload().getGreeting());
+    assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());
+    assertNotNull(result.getTraceId());
+    assertNotNull(result.getTimestamp());
+    assertNotNull(result.getTimeTaken());
+    assertEquals("00", result.getResponseCode());
+    assertEquals("Success", result.getResponseDesc());
   }
 
   @Test
-  void testExecute_blankName_throwsConstraintViolation() {
-    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
-        .correlationId("corr-123")
-        .payload(HelloWorldReqDTOPayload.builder().name("").build())
-        .build();
-
-    ConstraintViolationException ex = assertThrows(ConstraintViolationException.class, () -> {
-      helloWorldService.execute(req).block();
-    });
-
-    assertTrue(ex.getMessage().contains("name"));
-  }
-
-  @Test
-  void testExecute_blankCorrelationId_throwsConstraintViolation() {
-    HelloWorldReqDTO req = HelloWorldReqDTO.builder()
+  void testGreeting_missingCorrelationId_throwsConstraintViolationException() {
+    var req = HelloWorldReqDTO.builder()
         .correlationId("")
         .payload(HelloWorldReqDTOPayload.builder().name("John").build())
         .build();
 
-    assertThrows(ConstraintViolationException.class, () -> {
-      helloWorldService.execute(req).block();
-    });
+    assertThrows(ConstraintViolationException.class, () -> helloWorldService.execute(req));
+  }
+
+  @Test
+  void testGreeting_missingName_throwsConstraintViolationException() {
+    var req = HelloWorldReqDTO.builder()
+        .correlationId("corr-123")
+        .payload(HelloWorldReqDTOPayload.builder().name("").build())
+        .build();
+
+    assertThrows(ConstraintViolationException.class, () -> helloWorldService.execute(req));
   }
 }

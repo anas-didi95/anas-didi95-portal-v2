@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping(
@@ -21,13 +20,12 @@ public class HelloWorldControllerV1 implements HelloWorldController {
   private final HelloWorldService helloWorldService;
 
   @Override
-  public Mono<ResponseEntity<HelloWorldResDTO>> greeting(String correlationId, String name) {
+  public ResponseEntity<HelloWorldResDTO> greeting(String correlationId, String name) {
     var req = HelloWorldReqDTO.builder()
         .correlationId(correlationId)
         .payload(HelloWorldReqDTOPayload.builder().name(name).build())
         .build();
-    return helloWorldService
-        .execute(req)
-        .map(o -> ResponseEntity.status(o.getResponse().httpStatus).body(o));
+    var res = helloWorldService.execute(req);
+    return ResponseEntity.status(res.getResponse().httpStatus).body(res);
   }
 }

@@ -11,7 +11,6 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 
 @Slf4j
 @Aspect
@@ -40,25 +39,18 @@ public class ExecuteTraceAspect {
 
       Object result = joinPoint.proceed();
 
-      if (!(result instanceof Mono<?> mono)) {
-        throw new RuntimeException("Invalid return type!");
-      }
-
+      var oo = (BaseResDTO) result;
       var timeTaken = System.currentTimeMillis() - timeStart;
+      oo.setTraceId(timeStart + "");
+      oo.setTimestamp(OffsetDateTime.now());
+      oo.setTimeTaken(timeTaken);
+      oo.setResponseCode(oo.getResponse().code);
+      oo.setResponseDesc(oo.getResponse().message);
 
-      return mono.map(o -> {
-            var oo = (BaseResDTO) o;
-            oo.setTraceId(timeStart + "");
-            oo.setTimestamp(OffsetDateTime.now());
-            oo.setTimeTaken(timeTaken);
-            oo.setResponseCode(oo.getResponse().code);
-            oo.setResponseDesc(oo.getResponse().message);
-            log.debug("oo={}", oo);
-            return oo;
-          })
-          .doOnSuccess(res -> log.info("AOP Response: {}", res))
-          .doOnError(err -> log.error("AOP Execution error", err))
-          .doFinally(o -> log.info("AOP Time taken: {} ms", timeTaken));
+      log.info("AOP Response: {}", oo);
+      log.info("AOP Time taken: {} ms", timeTaken);
+
+      return oo;
     } finally {
       MDC.clear();
     }
