@@ -6,9 +6,11 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
+import lombok.extern.jackson.Jacksonized;
 
 @Data
 @SuperBuilder
+@Jacksonized
 @JsonIgnoreProperties(ignoreUnknown = true)
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
@@ -17,8 +19,9 @@ public class HelloWorldResDTO extends BaseResDTO {
 
   @Data
   @SuperBuilder
+  @Jacksonized
   @JsonIgnoreProperties(ignoreUnknown = true)
-  @ToString
+  @ToString(callSuper = true)
   public static class HelloWorldResDTO2Payload {
     private String greeting;
   }

@@ -7,12 +7,14 @@ import java.time.OffsetDateTime;
 import lombok.Data;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
+import lombok.extern.jackson.Jacksonized;
 
 @Data
 @SuperBuilder
+@Jacksonized
 @JsonIgnoreProperties(ignoreUnknown = true)
 @ToString(callSuper = true)
-public abstract class BaseResDTO {
+public class BaseResDTO {
 
   private String correlationId;
   private String traceId;
