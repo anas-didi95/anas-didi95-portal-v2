@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.anasdidi.common.CommonConstants;
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
 import com.anasdidi.uam.dto.HelloWorldResDTO;
@@ -31,7 +32,8 @@ class HelloWorldControllerV1Tests {
 
   private MockMvc mockMvc;
 
-  private static final String BASE_URL = "/uam/v1/hello-world";
+  private static final String BASE_URL =
+      CommonConstants.CONTEXT_PATH + CommonConstants.API_V1 + "/hello-world";
   private static final String CORRELATION_ID = "corr-123";
 
   @BeforeEach
@@ -50,7 +52,9 @@ class HelloWorldControllerV1Tests {
     when(helloWorldService.execute(any(HelloWorldReqDTO.class))).thenReturn(mockResponse);
 
     mockMvc
-        .perform(get(BASE_URL + "/greeting?name=John").header("App-Correlation-Id", CORRELATION_ID))
+        .perform(get(BASE_URL + "/greeting")
+            .param("name", "John")
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
         .andExpect(jsonPath("$.payload.greeting").value("Hi, John"));
@@ -59,7 +63,88 @@ class HelloWorldControllerV1Tests {
   @Test
   void testGreeting_missingName_returnsBadRequest() throws Exception {
     mockMvc
-        .perform(get(BASE_URL + "/greeting").header("App-Correlation-Id", CORRELATION_ID))
+        .perform(get(BASE_URL + "/greeting").header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void testGreeting_missingCorrelationId_returnsBadRequest() throws Exception {
+    mockMvc
+        .perform(get(BASE_URL + "/greeting").param("name", "John"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void testGreeting_serviceReturnsE01_returnsBadRequest() throws Exception {
+    var mockResponse = HelloWorldResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.E01_VALIDATION_ERROR)
+        .build();
+
+    when(helloWorldService.execute(any(HelloWorldReqDTO.class))).thenReturn(mockResponse);
+
+    mockMvc
+        .perform(get(BASE_URL + "/greeting")
+            .param("name", "John")
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload").doesNotExist());
+  }
+
+  @Test
+  void testGreeting_serviceReturnsE99_returnsInternalServerError() throws Exception {
+    var mockResponse = HelloWorldResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.E99_UNEXPECTED_ERROR)
+        .build();
+
+    when(helloWorldService.execute(any(HelloWorldReqDTO.class))).thenReturn(mockResponse);
+
+    mockMvc
+        .perform(get(BASE_URL + "/greeting")
+            .param("name", "John")
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload").doesNotExist());
+  }
+
+  @Test
+  void testGreeting_jsonResponseStructure() throws Exception {
+    var mockResponse = HelloWorldResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.S00_SUCCESS)
+        .payload(HelloWorldResDTOPayload.builder().greeting("Hi, John").build())
+        .build();
+
+    when(helloWorldService.execute(any(HelloWorldReqDTO.class))).thenReturn(mockResponse);
+
+    mockMvc
+        .perform(get(BASE_URL + "/greeting")
+            .param("name", "John")
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.correlationId").isString())
+        .andExpect(jsonPath("$.payload").isMap())
+        .andExpect(jsonPath("$.payload.greeting").isString());
+  }
+
+  @Test
+  void testGreeting_emptyName_serviceReturnsE01() throws Exception {
+    var mockResponse = HelloWorldResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.E01_VALIDATION_ERROR)
+        .build();
+
+    when(helloWorldService.execute(any(HelloWorldReqDTO.class))).thenReturn(mockResponse);
+
+    mockMvc
+        .perform(get(BASE_URL + "/greeting")
+            .param("name", "")
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload").doesNotExist());
   }
 }
