@@ -13,7 +13,7 @@ import lombok.extern.jackson.Jacksonized;
 @SuperBuilder
 @Jacksonized
 @JsonIgnoreProperties(ignoreUnknown = true)
-@ToString(callSuper = true)
+@ToString
 public class BaseResDTO {
 
   private String correlationId;

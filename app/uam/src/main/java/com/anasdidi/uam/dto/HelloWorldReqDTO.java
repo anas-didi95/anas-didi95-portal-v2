@@ -24,7 +24,7 @@ public class HelloWorldReqDTO extends BaseReqDTO {
   @SuperBuilder
   @Jacksonized
   @JsonIgnoreProperties(ignoreUnknown = true)
-  @ToString(callSuper = true)
+  @ToString
   public static class HelloWorldReqDTOPayload {
     @NotBlank private String name;
   }
