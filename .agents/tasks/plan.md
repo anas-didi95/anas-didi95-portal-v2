@@ -1,314 +1,212 @@
-# Plan: Controller & Service Test Implementation
+# Plan: Add YAML Formatter to Spotless
 
 ## Objective
 
-Refactor and extend test coverage for the `uam` module's controller and service layers. Rewrite controller tests from pure Mockito (`MockMvcBuilders.standaloneSetup`) to `@WebMvcTest` framework. Keep service tests as `@SpringBootTest` integration tests. Achieve > 80% line coverage across both layers.
+Add a YAML formatting step to the existing Spotless Maven plugin configuration in `app/pom.xml`, using the built-in Jackson YAML formatter, so that all `*.yml` and `*.yaml` files under the Maven project (`app/`) are automatically checked and formatted during the build.
 
 ## Requirements Snapshot
 
-- **R1:** Controller tests must use `@WebMvcTest` (not `MockitoExtension` + `standaloneSetup`).
-- **R2:** Service tests must remain integration tests (`@SpringBootTest`).
-- **R3:** Overall line coverage > 80% across `uam` module's controller and service code.
-- **R4:** Existing test assertions must be preserved where they remain valid.
+- **R1:** Spotless (v2.44.3) must format all `*.yml` and `*.yaml` files under `app/` using the Jackson YAMLFactory.
+- **R2:** The YAML formatter must use 2-space indentation (YAML standard) and preserve LF line endings.
+- **R3:** Running `./mvnw spotless:apply` must format the YAML files.
+- **R4:** Running `./mvnw verify` (or `spotless:check`) must validate YAML formatting and fail the build if violations exist.
+- **R5:** The existing Java, POM, and XML formatting must continue to work unchanged.
 
 ## Scope
 
-- Rewrite `uam/src/test/.../controller/impl/HelloWorldControllerV1Tests.java` to use `@WebMvcTest`.
-- Extend `uam/src/test/.../service/impl/HelloWorldServiceTests.java` with additional edge-case tests.
-- Add `JaCoCo` Maven plugin to the `uam` module for coverage measurement.
-- Add test-specific `application.yml` under `uam/src/test/resources/` if needed for service tests.
-- Run full test suite and verify coverage exceeds 80%.
-
-## Out of Scope
-
-- Tests for the `common` module (no `src/test/` exists yet).
-- Tests for the aspect layer (`ExecuteTraceAspect`) directly — it is exercised indirectly via service integration tests.
-- Liquibase, JPA, or repository tests (no entities/repos exist yet).
-- Security testing (security starter is commented out).
+- Add `<yaml>` configuration block to the Spotless plugin in `app/pom.xml`.
+- Add `<includes>` pattern targeting `src/**/*.yml` and `src/**/*.yaml` within the Maven project.
+- Run `./mvnw spotless:apply` to verify formatting works.
+- Run `./mvnw verify` to verify the full pipeline passes.
+- **Not in scope:** The root `docker-compose.yml` (outside the Maven project, not covered by Maven Spotless execution).
 
 ## Assumptions and Constraints
 
-- The Spring Boot 4.0.6 / JUnit 5 / Mockito stack bundled with `spring-boot-starter-test` is available.
-- `spring-boot-starter-test` includes `@WebMvcTest` support via `spring-boot-test-autoconfigure`.
-- `@WebMvcTest(HelloWorldControllerV1.class)` does **not** load `@Component`/`@Service` beans — only the controller under test. We use `@MockBean` for `HelloWorldService`.
-- `@SpringBootTest` in service tests loads the full context, including `ExecuteTraceAspect`. This means `ConstraintViolationException` thrown inside the `@Valid` method is **caught by the aspect** and translated into an E01 response — it does NOT propagate to the caller. (Currently the service tests assert `assertThrows(ConstraintViolationException.class, ...)` which would **fail** if the aspect is loaded, so those tests need to be updated.)
+- Spotless v2.44.3 ships with a built-in `<yaml>` step using Jackson's `jackson-dataformat-yaml`.
+- The YAML step is a top-level element (like `<java>` and `<pom>`), not a `<format>` inside `<formats>`.
+- Target files must be explicitly listed via `<includes>` (YAML is not auto-discovered like Java).
+- The Maven project root is `app/`, so includes are relative to that directory.
+- No `.yaml` files currently exist in the project — only `.yml` files — but support for both is included for future-proofing.
+- The project's global `<lineEndings>` policy is not currently set; we should add `LF` to be explicit (matching the existing style).
 
 ## Risks and Areas Requiring Care
 
-1. **Aspect vs. `@Validated` interaction (HIGH):** `HelloWorldService.execute(@Valid ...)` triggers `ConstraintViolationException` inside `joinPoint.proceed()`. The `ExecuteTraceAspect` catches it and returns a response with `E01_VALIDATION_ERROR` **without re-throwing**. Existing service tests `assertThrows(ConstraintViolationException.class, ...)` will **fail** when the aspect is active. Must rewrite them to expect a normal return with E01 fields instead.
-2. **Coverage gap for `@WebMvcTest` error paths:** With a mocked service, `ConstraintViolationException` from validation won't occur naturally (Spring MVC request validation at the controller parameter level would produce 400 errors before the service is called). Need to explicitly decide which paths are testable in each layer.
-3. **No JaCoCo configured yet:** Must add and configure it for `uam` module only.
+1. **Jackson version mismatch:** The bundled Jackson version in Spotless must be compatible. Spotless 2.44.3 bundles its own Jackson — no external dependency needed.
+2. **YAML formatting changes may alter content:** Jackson's YAML pretty-printer may change quoting (e.g., unquoted strings to quoted, or vice versa), which can affect Spring Boot property loading. Spotless's Jackson mode uses defaults that preserve safe quoting.
+3. **Root `docker-compose.yml` not covered:** Because Spotless runs from the Maven POM (`app/`), files outside the Maven project root are not included. The root `docker-compose.yml` would need a separate formatter (e.g., Prettier or manual formatting if desired).
+4. **Existing files may need reformatting:** Running `spotless:apply` for the first time may reformat existing YAML files, changing whitespace or quoting. This is expected and should produce clean, consistent output.
 
 ## Core Concepts
 
-### `@WebMvcTest` vs `MockMvcBuilders.standaloneSetup`
+### Spotless YAML step
 
-| Concern | `MockitoExtension` + `standaloneSetup` (current) | `@WebMvcTest` (target) |
+The YAML step uses Jackson's `YAMLFactory` to parse and pretty-print YAML content. It is a top-level configuration block alongside `<java>` and `<pom>`:
+
+```xml
+<yaml>
+  <includes>
+    <include>src/**/*.yml</include>
+    <include>src/**/*.yaml</include>
+  </includes>
+  <jackson>
+    <!-- Optional Jackson SerializationFeature settings -->
+    <features>
+      <INDENT_OUTPUT>true</INDENT_OUTPUT>
+    </features>
+    <!-- Optional YAMLGenerator.Feature settings -->
+    <yamlFeatures>
+      <MINIMIZE_QUOTES>false</MINIMIZE_QUOTES>
+    </yamlFeatures>
+  </jackson>
+</yaml>
+```
+
+### Jackson YAML formatting behavior
+
+| Concern | Default | Notes |
 |---|---|---|
-| Context loading | None (unit test) | Slices web layer only |
-| MockMvc | Manually built | `@Autowired` |
-| Service mock | `@Mock` | `@MockBean` |
-| Exception handling | Manual setup | Full Spring MVC machinery |
-| JSON serialization | Manual if needed | Auto-configured `ObjectMapper` |
+| Indentation | 2 spaces | YAML standard, matches project style |
+| Quote style | Minimal quoting | `MINIMIZE_QUOTES=false` preserves existing quoting |
+| Document start marker | Not written | `WRITE_DOC_START_MARKER=false` (default) |
+| Line endings | Inherits from global `lineEndings` setting | Should set `LF` at the configuration level |
 
-Before (current):
-```java
-@ExtendWith(MockitoExtension.class)
-class HelloWorldControllerV1Tests {
-    @Mock HelloWorldService helloWorldService;
-    @InjectMocks HelloWorldControllerV1 helloWorldControllerV1;
-    private MockMvc mockMvc;
+### How it integrates with the existing pipeline
 
-    @BeforeEach
-    void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(helloWorldControllerV1).build();
-    }
-}
+```text
+mvn spotless:check   → checks Java + POM + XML + YAML
+mvn spotless:apply   → formats Java + POM + XML + YAML
+mvn verify / deploy  → binds spotless:check for all formats
 ```
-
-After (target):
-```java
-@WebMvcTest(HelloWorldControllerV1.class)
-class HelloWorldControllerV1Tests {
-    @Autowired private MockMvc mockMvc;
-    @MockBean private HelloWorldService helloWorldService;
-    // No setUp() needed
-}
-```
-
-### Aspect + `@Validated` flow (service integration test)
-
-```
-Caller → Service Proxy → @Validated interceptor → ExecuteTraceAspect → joinPoint.proceed()
-                                                                         │
-                                                      ConstraintViolationException
-                                                                         │
-                                                      └─ Aspect catches it
-                                                         Sets E01 on response
-                                                         Returns response (no re-throw)
-```
-
-This means: in `@SpringBootTest`, calling `helloWorldService.execute(invalidReq)` **returns a response** with error fields — it does **not** throw `ConstraintViolationException`.
-
----
 
 ## Sub-Tasks
 
-### Sub-Task 1: Rewrite Controller Tests to Use `@WebMvcTest`
+### Sub-Task 1: Add YAML formatter configuration to `app/pom.xml`
 
 - **Status:** Pending
-- **Objective:** Replace the current `@ExtendWith(MockitoExtension.class)` + `MockMvcBuilders.standaloneSetup()` pattern with `@WebMvcTest(HelloWorldControllerV1.class)` and extend coverage.
-- **Related Requirements:** R1, R3
+- **Objective:** Add the `<yaml>` configuration block to the Spotless plugin in `app/pom.xml`, targeting all `.yml` and `.yaml` files under the Maven project.
+- **Related Requirements:** R1, R2, R5
 - **Dependencies and Preconditions:** None
 - **In Scope for This Sub-Task:**
-  - Change test class annotation from `@ExtendWith(MockitoExtension.class)` to `@WebMvcTest(HelloWorldControllerV1.class)`.
-  - Replace `@Mock` + `@InjectMocks` with `@MockBean`.
-  - Replace `MockMvcBuilders.standaloneSetup()` with `@Autowired MockMvc mockMvc`.
-  - Remove `@BeforeEach setUp()`.
-  - Preserve existing happy-path and missing-name tests.
-  - Add the following new test cases for > 80% coverage:
-    - **Missing correlationId header** → 400 (Spring MVC requires the header per the controller interface)
-    - **Null/empty name param** → 400 (Spring MVC treats `required=true` + empty string differently from absent param; test both)
-    - **Service returns E01 error response** → mock returns response with `ResponseEnum.E01_VALIDATION_ERROR` → verify HTTP 400 + E01 code and desc in JSON
-    - **Service returns E99 error response** → mock returns response with `ResponseEnum.E99_UNEXPECTED_ERROR` → verify HTTP 500 + E99 code and desc in JSON
-    - **JSON response structure** — verify `correlationId`, `responseCode`, `responseDesc`, `payload.greeting` are present on success
+  - Edit `app/pom.xml` to add a `<yaml>` block under `<configuration>` in the `spotless-maven-plugin`.
+  - Include patterns for `src/**/*.yml` and `src/**/*.yaml`.
+  - Configure Jackson formatter with sensible defaults (2-space indent, LF line endings via global `<lineEndings>`).
+  - Preserve all existing `<java>`, `<pom>`, and `<formats>` blocks exactly as they are.
 - **Out of Scope for This Sub-Task:**
-  - Aspect-level behavior (tested in service integration tests)
-  - Exception-throwing service mock (the controller never sees exceptions from the service — the aspect handles them in production; in `@WebMvcTest`, the aspect is not loaded, so any exception from the mock would produce a generic 500, which is not a meaningful coverage target)
+  - Adding the root `docker-compose.yml` — it's outside the Maven project.
+  - Adding Prettier as an alternative YAML formatter.
+  - Adding `*.yaml` support to the existing XML `<formats>` block.
 - **Instructions:**
-  - Replace the file at `app/uam/src/test/java/com/anasdidi/uam/controller/impl/HelloWorldControllerV1Tests.java`.
-  - Use `@WebMvcTest(HelloWorldControllerV1.class)` — this pulls in Spring MVC auto-configuration.
-  - `@Autowired MockMvc mockMvc`.
-  - `@MockBean HelloWorldService helloWorldService`.
-  - For each test that returns error codes via the mock, construct the `HelloWorldResDTO` with the appropriate `ResponseEnum` and verify the HTTP status and error fields.
-  - Use `jsonPath("$.responseCode")`, `jsonPath("$.responseDesc")` etc.
+  1. Read `app/pom.xml`.
+  2. Inside the `<configuration>` element of the `spotless-maven-plugin` (after the closing `</formats>` tag), add a `<lineEndings>` element set to `LF` at the configuration level (if not already present), then add the `<yaml>` block.
+  3. The `<yaml>` block should contain:
+     ```xml
+     <yaml>
+       <includes>
+         <include>src/**/*.yml</include>
+         <include>src/**/*.yaml</include>
+       </includes>
+       <jackson>
+         <features>
+           <INDENT_OUTPUT>true</INDENT_OUTPUT>
+         </features>
+         <yamlFeatures>
+           <MINIMIZE_QUOTES>false</MINIMIZE_QUOTES>
+         </yamlFeatures>
+       </jackson>
+     </yaml>
+     ```
+  4. Add `<lineEndings>LF</lineEndings>` as a top-level element inside `<configuration>` (before `<java>`) to ensure all formats use LF consistently. If it already exists, skip this step.
 - **Acceptance Criteria:**
-  - All controller tests pass.
-  - No `MockMvcBuilders.standaloneSetup` usage remains.
-  - At least 6 test methods covering the scenarios listed above.
+  - `app/pom.xml` contains a valid `<yaml>` block with proper includes.
+  - Existing `<java>`, `<pom>`, and `<formats>` blocks are unchanged.
+  - `./mvnw compile` succeeds (POM is well-formed).
 - **Cautionary Points (Risks & Edge Cases):**
-  - `@WebMvcTest` does NOT load `@Service`, `@Component`, or `@Aspect` beans — the `ExecuteTraceAspect` is absent. Error handling via the aspect does not apply; the mock returns whatever we tell it.
-  - Missing `name` query param: `@RequestParam(required = true)` makes Spring return 400 automatically — no service call happens.
-  - Missing `App-Correlation-Id` header: the interface declares `@RequestHeader(name = CommonConstants.HEADER_CORR_ID)` — Spring returns 400 with missing header error. Test can just verify HTTP 400.
-  - Ensure the test class is package-private (`class` not `public class`) to match existing style.
+  - The `<yaml>` element must come at the end of `<configuration>`, or at least after `<formats>`, though order generally doesn't matter for Spotless.
+  - XML must be well-formed — remember to close tags properly.
+  - The `<includes>` element in `<yaml>` uses the same structure as `<format>` includes but is a direct child of `<yaml>`, NOT wrapped in `<target>`.
+- **Implementation Suggestions:**
+  - The `<lineEndings>` element goes at the configuration level (child of `<configuration>`) and applies to ALL format steps.
+  - Jackson version is not specified, so Spotless uses its bundled version. Add `<version>` only if a specific Jackson version is needed (not needed here).
 - **Testing Suggestions:**
-  - Run: `./mvnw test -pl uam -am -Dtest=HelloWorldControllerV1Tests`
-  - All 6+ tests should pass.
-- **Done When:** All declared controller tests pass on `./mvnw test -pl uam -am -Dtest=HelloWorldControllerV1Tests`, and no `StandaloneMockMvcBuilder` usage exists in the file.
+  - `./mvnw compile` — basic POM validity check.
+  - `./mvnw spotless:check -pl uam -am` — should run without errors (YAML check should pass if files are already clean).
+- **Done When:** `./mvnw compile` succeeds and the YAML configuration is present in `app/pom.xml`.
 
 ---
 
-### Sub-Task 2: Update and Extend Service Integration Tests
+### Sub-Task 2: Run `spotless:apply` and verify YAML formatting
 
 - **Status:** Pending
-- **Objective:** Update existing service tests for correctness with the active `ExecuteTraceAspect`, and add additional edge cases to push coverage > 80%.
+- **Objective:** Run the Spotless apply goal and verify that all YAML files are formatted correctly. Inspect any changes made to existing YAML files.
 - **Related Requirements:** R2, R3
-- **Dependencies and Preconditions:** None
+- **Dependencies and Preconditions:** Sub-Task 1 completed.
 - **In Scope for This Sub-Task:**
-  - **Rewrite `testGreeting_missingCorrelationId_throwsConstraintViolationException`** to expect a normal return with error fields instead of `assertThrows`. The aspect catches `ConstraintViolationException` and returns a `HelloWorldResDTO` with `response = E01_VALIDATION_ERROR`. Verify:
-    - No exception thrown.
-    - `responseCode` = "E01", `responseDesc` = "Validation Error".
-    - `correlationId` is set (even though blank, the aspect reads it before validation).
-    - `traceId`, `timestamp`, `timeTaken` are populated by the aspect.
-  - **Same rewrite for `testGreeting_missingName_throwsConstraintViolationException`** — expect E01 error response, not an exception.
-  - Add new test cases:
-    - **Empty string name (`name=""`) with valid correlationId** → E01 validation error (aspect catches `ConstraintViolationException` for the `@NotBlank name`).
-    - **Name with special characters** → verify greeting is `"Hi, <exact input>"` (no sanitization).
-    - **Name with leading/trailing whitespace** → verify greeting preserves whitespace (pass-through).
-    - **Very long name** → verify greeting works (no truncation).
-    - **Null payload** — if possible (the payload is `@Valid @NonNull`, so null payload would trigger validation before method call — E01 response).
+  - Run `./mvnw spotless:apply` to format all files (Java, POM, XML, YAML).
+  - Check `git diff` to see what changed in the YAML files.
+  - Ensure the changes are minimal and correct (no broken YAML content, proper formatting).
 - **Out of Scope for This Sub-Task:**
-  - Testing `ServiceError` / `E99UnexpectedError` paths (the service never throws these; aspect tests for common module are out of scope).
-  - Testing the aspect directly.
+  - Committing changes (user commits when ready).
+  - Running full `verify` pipeline (handled in Sub-Task 3).
 - **Instructions:**
-  - Edit `app/uam/src/test/java/com/anasdidi/uam/service/impl/HelloWorldServiceTests.java`.
-  - Change the two `assertThrows(ConstraintViolationException.class, ...)` to call `execute()` normally and assert E01 response fields.
-  - Add new test methods following the same pattern: build request, call `execute()`, assert fields on the returned DTO.
-  - For happy-path tests, continue asserting `traceId`, `timestamp`, and `timeTaken` are non-null.
-  - For error-path tests, assert `responseCode` = "E01" and `responseDesc` = "Validation Error".
+  1. Run `./mvnw spotless:apply` from `app/`.
+  2. Run `git diff` to inspect formatting changes to YAML files.
+  3. Verify the YAML content is still valid (Spring Boot can parse it).
 - **Acceptance Criteria:**
-  - All service tests pass.
-  - No `assertThrows(ConstraintViolationException.class, ...)` remains.
-  - At least 7 test methods covering happy path, correlationId blank, name blank, name empty, special chars, whitespace, long name, and null payload.
+  - `spotless:apply` completes without errors.
+  - YAML files are consistently formatted (2-space indent, LF line endings).
+  - The existing YAML content is semantically preserved (no keys removed, no values changed).
 - **Cautionary Points (Risks & Edge Cases):**
-  - **This is the highest risk sub-task.** The `ExecuteTraceAspect` catches `ConstraintViolationException` and returns a response. Existing tests that assert exception propagation will **FAIL** once the aspect is properly loaded. The rewriting is mandatory.
-  - If the `@SpringBootTest` does NOT load the aspect (edge case), the tests would continue to pass with the old `assertThrows` pattern. Verify by checking the response in the new tests — if `responseCode` is "E01" instead of an exception being thrown, the aspect is active.
-  - `@Data` on DTOs means `setResponse()` is available. The aspect calls `res.setResponse(ResponseEnum.E01_VALIDATION_ERROR)` on the **pre-created empty response** it made with `objectMapper.convertValue(...)`. However, in the service impl, we return a **new** response object (created via `HelloWorldResDTO.builder()...build()`). The aspect's `res = (BaseResDTO) joinPoint.proceed()` replaces the empty response with the returned one, so the returned response object has `response` set by the service impl to `S00_SUCCESS`. On validation error, the aspect catches the exception and calls `setResponse(E01)` on its original empty `res` object. So the E01 is set on the aspect's response, not on the service's. This should still work correctly.
-  - Verify that `correlationId` on the error response is set. The aspect creates `res` using `objectMapper.convertValue(Map.of("correlationId", req.getCorrelationId()), returnClass)`, so even with blank correlationId, the value is set.
+  - Jackson may change quoting on string values (e.g., `"sa"` → `sa` or vice versa). Double-check that Spring Boot's YAML parser handles the output correctly.
+  - If the Jackson formatter removes quotes that Spring Boot needs (e.g., around URLs with `:`), this could break configuration. Verify with a compile/test run.
+- **Implementation Suggestions:**
+  - If Jackson's default quoting is problematic, consider enabling `MINIMIZE_QUOTES` feature or adding explicit `<yamlFeatures>` to preserve more quoting.
 - **Testing Suggestions:**
-  - Run: `./mvnw test -pl uam -am -Dtest=HelloWorldServiceTests`
-  - All 7+ tests should pass.
-  - To verify the aspect is loaded, temporarily add a `log.info()` or debugger in the test — but the E01 response code assertion is the strongest signal.
-- **Done When:** All service tests pass, all `assertThrows(ConstraintViolationException.class)` are replaced, and at least 7 test methods exist.
+  - `./mvnw spotless:apply`
+  - `git diff` to verify changes.
+  - `./mvnw compile -pl uam -am` to confirm the YAML is still valid config.
+- **Done When:** `spotless:apply` succeeds, YAML files are consistently formatted, and the project still compiles.
 
 ---
 
-### Sub-Task 3: Add JaCoCo Maven Plugin for Coverage Verification
+### Sub-Task 3: Run full `verify` pipeline
 
 - **Status:** Pending
-- **Objective:** Add the JaCoCo Maven plugin to the `uam` module to measure and verify > 80% line coverage.
-- **Related Requirements:** R3
-- **Dependencies and Preconditions:** Sub-Task 1 and Sub-Task 2 must be completed (tests must pass first).
+- **Objective:** Run the full Maven verify pipeline to confirm all formatting checks (including YAML) pass, tests pass, and the build succeeds end-to-end.
+- **Related Requirements:** R4, R5
+- **Dependencies and Preconditions:** Sub-Task 2 completed (YAML files are already formatted).
 - **In Scope for This Sub-Task:**
-  - Add `org.jacoco:jacoco-maven-plugin` to `app/uam/pom.xml`.
-  - Configure `prepare-agent` goal (pre-integration-test phase).
-  - Configure `report` goal (post-integration-test phase) to generate HTML/XML reports.
-  - Optionally configure a `check` goal with `counter="LINE"`, `value="COVEREDRATIO"`, `minimum="0.80"` to enforce 80% line coverage for the `com.anasdidi.uam.controller.impl` and `com.anasdidi.uam.service.impl` packages.
-  - Run `./mvnw clean verify -pl uam -am` and verify JaCoCo report is generated.
+  - Run `./mvnw verify` from `app/`.
+  - Confirm Spotless `check` passes for all formats (Java, POM, XML, YAML).
+  - Confirm tests still pass (no regressions from YAML formatting).
+  - Confirm the build succeeds with no errors.
 - **Out of Scope for This Sub-Task:**
-  - JaCoCo for the `common` module (no tests exist there yet).
-  - Branch coverage — line coverage is sufficient for the > 80% requirement.
-  - CI/CD integration.
+  - JaCoCo coverage or other checks not related to formatting.
 - **Instructions:**
-  - Add the plugin under `<build><plugins>` in `app/uam/pom.xml`:
-    ```xml
-    <plugin>
-      <groupId>org.jacoco</groupId>
-      <artifactId>jacoco-maven-plugin</artifactId>
-      <version>0.8.12</version>
-      <executions>
-        <execution>
-          <id>prepare-agent</id>
-          <goals><goal>prepare-agent</goal></goals>
-        </execution>
-        <execution>
-          <id>report</id>
-          <phase>verify</phase>
-          <goals><goal>report</goal></goals>
-        </execution>
-        <execution>
-          <id>check</id>
-          <phase>verify</phase>
-          <goals><goal>check</goal></goals>
-          <configuration>
-            <rules>
-              <rule>
-                <element>PACKAGE</element>
-                <includes>
-                  <include>com.anasdidi.uam.controller.impl</include>
-                  <include>com.anasdidi.uam.service.impl</include>
-                </includes>
-                <limits>
-                  <limit>
-                    <counter>LINE</counter>
-                    <value>COVEREDRATIO</value>
-                    <minimum>0.80</minimum>
-                  </limit>
-                </limits>
-              </rule>
-            </rules>
-          </configuration>
-        </execution>
-      </executions>
-    </plugin>
-    ```
+  1. Run `./mvnw verify` from `app/`.
+  2. Check the build output for any Spotless failures.
 - **Acceptance Criteria:**
-  - `./mvnw clean verify -pl uam -am` succeeds.
-  - JaCoCo report is generated at `app/uam/target/site/jacoco/index.html`.
-  - Coverage check passes (≥ 80% line coverage on the specified packages).
+  - `./mvnw verify` succeeds.
+  - No Spotless failures (Java, POM, XML, or YAML).
+  - All tests pass.
 - **Cautionary Points (Risks & Edge Cases):**
-  - JaCoCo `check` can fail the build if coverage is below the threshold. Start with `minimum="0.80"` but if tests don't quite reach it, adjust coverage gap items in Sub-Tasks 1/2 first, then raise the minimum.
-  - The `check` execution can be made to fail the build (`haltOnFailure=true` by default; for JaCoCo 0.8.12 this is the behavior).
-  - JaCoCo 0.8.12 works with Java 25 (latest JaCoCo as of 2026 supports Java 25).
-  - Ensure no conflicting bytecode instrumentation with Spring AOP — this is a standard combination.
+  - If `spotless:apply` was not run first, `verify` will fail because `spotless:check` runs during the `verify` phase. This is expected behavior.
+  - If YAML formatting changed the file content, the `spotless:check` will pass because the files are already formatted (assuming Sub-Task 2 was run).
 - **Testing Suggestions:**
-  - `./mvnw clean verify -pl uam -am` — full pipeline including Spotless and JaCoCo.
-  - Open `app/uam/target/site/jacoco/index.html` in a browser to inspect coverage.
-  - If the check fails, inspect which lines/methods are uncovered and add missing tests in Sub-Tasks 1/2.
-- **Done When:** `./mvnw clean verify -pl uam -am` succeeds and the JaCoCo report shows ≥ 80% line coverage for `com.anasdidi.uam.controller.impl` and `com.anasdidi.uam.service.impl`.
-
----
-
-### Sub-Task 4: Final Verification & Coverage Gap Closure
-
-- **Status:** Pending
-- **Objective:** Run the full pipeline, inspect the JaCoCo report, and close any coverage gaps below 80%.
-- **Related Requirements:** R3
-- **Dependencies and Preconditions:** Sub-Tasks 1, 2, and 3 completed.
-- **In Scope for This Sub-Task:**
-  - Run `./mvnw clean verify -pl uam -am`.
-  - If the JaCoCo `check` fails, inspect the report to identify uncovered lines.
-  - Add or adjust test cases in the controller or service test classes to cover the missing lines.
-  - Repeat until `check` passes with ≥ 80%.
-  - Ensure all tests pass and no formatting issues exist (`spotless:check` runs during `verify`).
-- **Out of Scope for This Sub-Task:**
-  - Adding new production code.
-  - Changing existing production logic.
-- **Instructions:**
-  - Run the full pipeline first to see if it passes.
-  - If coverage is below 80%, inspect the report. Likely uncovered areas:
-    - The `HelloWorldControllerV1.greeting()` method is fully covered by the 6+ test cases.
-    - The `HelloWorldService.execute()` method is covered by happy-path + multiple validation-error tests.
-    - The private `HelloWorldService.prepareGreeting()` method is indirectly covered by happy-path tests.
-  - If coverage is still low, consider:
-    - Testing additional DTO field accessors indirectly.
-    - Adding edge-case controller tests for different content types or malformed requests.
-    - Adding a service test with a null payload (if not already covered).
-- **Acceptance Criteria:**
-  - `./mvnw clean verify -pl uam -am` passes.
-  - JaCoCo report shows ≥ 80% line coverage for both target packages.
-- **Cautionary Points (Risks & Edge Cases):**
-  - Spotless formatting check runs during `verify`. If tests pass but formatting fails, run `./mvnw spotless:apply -pl uam -am` first.
-  - If the coverage is very close (e.g., 78%), adding one or two test cases should close the gap.
-- **Testing Suggestions:**
-  - `./mvnw clean verify -pl uam -am 2>&1 | tee verification.log`
-- **Done When:** The full `verify` pipeline completes successfully with all tests passing, Spotless passing, and JaCoCo coverage ≥ 80%.
+  - `./mvnw verify 2>&1 | tail -50`
+- **Done When:** `./mvnw verify` completes successfully.
 
 ---
 
 ## Final Integration & Verification
 
-- **System-Wide Test:** `./mvnw clean verify -pl uam -am`
-  - Compiles `common` and `uam`.
-  - Runs Spotless `check`.
-  - Runs all tests.
-  - Generates JaCoCo report.
+- **System-Wide Test:** `./mvnw verify` from `app/` — compiles modules, runs Spotless check (all 4 formats), and runs tests.
 - **Completion Checklist:**
-  - [ ] Controller tests use `@WebMvcTest` (Sub-Task 1).
-  - [ ] All controller test scenarios pass (≥ 6 tests).
-  - [ ] Service tests use `@SpringBootTest` (Sub-Task 2).
-  - [ ] `assertThrows(ConstraintViolationException.class)` replaced with E01 response assertions (Sub-Task 2).
-  - [ ] All service test scenarios pass (≥ 7 tests).
-  - [ ] JaCoCo plugin configured in `uam/pom.xml` (Sub-Task 3).
-  - [ ] Coverage ≥ 80% for `com.anasdidi.uam.controller.impl` and `com.anasdidi.uam.service.impl` (Sub-Task 4).
-  - [ ] `./mvnw clean verify -pl uam -am` passes end-to-end.
+  - [ ] YAML `<yaml>` block added to `app/pom.xml` (Sub-Task 1).
+  - [ ] `<lineEndings>LF</lineEndings>` set at configuration level (if not already present).
+  - [ ] `./mvnw spotless:apply` formats YAML files without errors (Sub-Task 2).
+  - [ ] YAML files retain valid, semantically correct content (Sub-Task 2).
+  - [ ] `./mvnw verify` passes with all checks and tests (Sub-Task 3).
+
+## Open Questions
+
+- *(None — requirements are clear and self-contained.)*
