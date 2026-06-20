@@ -161,8 +161,8 @@ class HelloWorldServiceTests {
     assertNotNull(result);
     assertEquals("corr-null", result.getCorrelationId());
     assertNull(result.getPayload());
-    assertEquals(ResponseEnum.E99_UNEXPECTED_ERROR, result.getResponse());
-    assertEquals("E99", result.getResponseCode());
-    assertEquals("Unexpected Error", result.getResponseDesc());
+    assertEquals(ResponseEnum.E01_VALIDATION_ERROR, result.getResponse());
+    assertEquals("E01", result.getResponseCode());
+    assertEquals("Validation Error", result.getResponseDesc());
   }
 }

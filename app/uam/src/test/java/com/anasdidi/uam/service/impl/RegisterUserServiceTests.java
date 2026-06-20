@@ -216,12 +216,12 @@ class RegisterUserServiceTests {
     assertNotNull(result);
     assertEquals("corr-null", result.getCorrelationId());
     assertNull(result.getPayload());
-    assertEquals(ResponseEnum.E99_UNEXPECTED_ERROR, result.getResponse());
+    assertEquals(ResponseEnum.E01_VALIDATION_ERROR, result.getResponse());
     assertNotNull(result.getTraceId());
     assertNotNull(result.getTimestamp());
     assertNotNull(result.getTimeTaken());
-    assertEquals("E99", result.getResponseCode());
-    assertEquals("Unexpected Error", result.getResponseDesc());
+    assertEquals("E01", result.getResponseCode());
+    assertEquals("Validation Error", result.getResponseDesc());
   }
 
   @Test
