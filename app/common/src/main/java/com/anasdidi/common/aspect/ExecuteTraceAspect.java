@@ -46,7 +46,7 @@ public class ExecuteTraceAspect {
         .orElseThrow(() -> new RuntimeException("No parameter found!"));
 
     var method = (MethodSignature) joinPoint.getSignature();
-    Class<BaseResDTO> returnClass = method.getReturnType();
+    Class<? extends BaseResDTO> returnClass = method.getReturnType();
     var res =
         objectMapper.convertValue(Map.of("correlationId", req.getCorrelationId()), returnClass);
 
