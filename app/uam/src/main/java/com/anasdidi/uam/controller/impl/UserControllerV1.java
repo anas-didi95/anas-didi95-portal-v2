@@ -6,7 +6,11 @@ import com.anasdidi.uam.controller.UserController;
 import com.anasdidi.uam.dto.RegisterUserReqDTO;
 import com.anasdidi.uam.dto.RegisterUserReqDTO.RegisterUserReqDTOPayload;
 import com.anasdidi.uam.dto.RegisterUserResDTO;
+import com.anasdidi.uam.dto.SearchUserReqDTO;
+import com.anasdidi.uam.dto.SearchUserReqDTO.SearchUserReqDTOPayload;
+import com.anasdidi.uam.dto.SearchUserResDTO;
 import com.anasdidi.uam.service.impl.RegisterUserService;
+import com.anasdidi.uam.service.impl.SearchUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserControllerV1 implements UserController {
 
   private final RegisterUserService registerUserService;
+  private final SearchUserService searchUserService;
 
   @Override
   public ResponseEntity<RegisterUserResDTO> registerUser(
@@ -25,6 +30,16 @@ public class UserControllerV1 implements UserController {
     var req =
         RegisterUserReqDTO.builder().correlationId(correlationId).payload(body).build();
     var res = registerUserService.execute(req);
+    return ResponseEntity.status(res.getResponse().httpStatus).body(res);
+  }
+
+  @Override
+  public ResponseEntity<SearchUserResDTO> searchUser(String correlationId, String name) {
+    var req = SearchUserReqDTO.builder()
+        .correlationId(correlationId)
+        .payload(SearchUserReqDTOPayload.builder().name(name).build())
+        .build();
+    var res = searchUserService.execute(req);
     return ResponseEntity.status(res.getResponse().httpStatus).body(res);
   }
 }
