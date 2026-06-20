@@ -1,6 +1,6 @@
 package com.anasdidi.uam.dto;
 
-import com.anasdidi.common.BaseResDTO;
+import com.anasdidi.common.dto.BaseResDTO;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;

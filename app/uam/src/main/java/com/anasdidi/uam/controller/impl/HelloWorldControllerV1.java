@@ -1,6 +1,7 @@
 package com.anasdidi.uam.controller.impl;
 
 import com.anasdidi.common.CommonConstants;
+import com.anasdidi.uam.UamConstants;
 import com.anasdidi.uam.controller.HelloWorldController;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
 import com.anasdidi.uam.dto.HelloWorldReqDTO.HelloWorldReqDTOPayload;
@@ -12,8 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping(
-    CommonConstants.CONTEXT_PATH + CommonConstants.API_V1 + HelloWorldController.BASE_URL)
+@RequestMapping(UamConstants.CONTEXT_PATH + CommonConstants.API_V1 + HelloWorldController.BASE_URL)
 @RequiredArgsConstructor
 public class HelloWorldControllerV1 implements HelloWorldController {
 

@@ -1,6 +1,6 @@
 package com.anasdidi.uam.dto;
 
-import com.anasdidi.common.BaseReqDTO;
+import com.anasdidi.common.dto.BaseReqDTO;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;

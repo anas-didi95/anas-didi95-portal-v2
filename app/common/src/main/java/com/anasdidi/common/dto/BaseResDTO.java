@@ -1,4 +1,4 @@
-package com.anasdidi.common;
+package com.anasdidi.common.dto;
 
 import com.anasdidi.common.enums.ResponseEnum;
 import com.fasterxml.jackson.annotation.JsonIgnore;

@@ -1,8 +1,8 @@
 package com.anasdidi.common.aspect;
 
-import com.anasdidi.common.BaseReqDTO;
-import com.anasdidi.common.BaseResDTO;
 import com.anasdidi.common.CommonUtils;
+import com.anasdidi.common.dto.BaseReqDTO;
+import com.anasdidi.common.dto.BaseResDTO;
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.common.error.E99UnexpectedError;
 import com.anasdidi.common.error.ServiceError;
@@ -31,7 +31,7 @@ public class ExecuteTraceAspect {
     this.objectMapper = CommonUtils.prepareObjectMapper();
   }
 
-  @Pointcut("execution(* com.anasdidi.common.IBaseService.execute(..))")
+  @Pointcut("execution(* com.anasdidi.common.service.IBaseService.execute(..))")
   void serviceExecution() {}
 
   @Around("serviceExecution()")

@@ -1,5 +1,7 @@
-package com.anasdidi.common;
+package com.anasdidi.common.service;
 
+import com.anasdidi.common.dto.BaseReqDTO;
+import com.anasdidi.common.dto.BaseResDTO;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 

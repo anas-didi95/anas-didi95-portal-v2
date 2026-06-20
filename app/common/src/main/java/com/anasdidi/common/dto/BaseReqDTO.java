@@ -1,4 +1,4 @@
-package com.anasdidi.common;
+package com.anasdidi.common.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;

@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.anasdidi.common.CommonConstants;
 import com.anasdidi.common.enums.ResponseEnum;
+import com.anasdidi.uam.UamConstants;
 import com.anasdidi.uam.dto.HelloWorldReqDTO;
 import com.anasdidi.uam.dto.HelloWorldResDTO;
 import com.anasdidi.uam.dto.HelloWorldResDTO.HelloWorldResDTOPayload;
@@ -33,7 +34,7 @@ class HelloWorldControllerV1Tests {
   private MockMvc mockMvc;
 
   private static final String BASE_URL =
-      CommonConstants.CONTEXT_PATH + CommonConstants.API_V1 + "/hello-world";
+      UamConstants.CONTEXT_PATH + CommonConstants.API_V1 + "/hello-world";
   private static final String CORRELATION_ID = "corr-123";
 
   @BeforeEach
