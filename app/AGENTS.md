@@ -29,3 +29,4 @@ The Maven wrapper at `app/mvnw` is the only valid one. There is a stale duplicat
 - H2 console (`spring-boot-h2console`) is included for development.
 - Actuator (`spring-boot-starter-actuator`) is included but unconfigured.
 - Logback writes to `uam/logs/` (gitignored via root `.gitignore`).
+- **JaCoCo** enforces ≥80% line coverage for `com.anasdidi.uam.controller.impl` and `com.anasdidi.uam.service.impl` during `verify`.
