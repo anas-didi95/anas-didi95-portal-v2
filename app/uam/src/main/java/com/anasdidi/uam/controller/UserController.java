@@ -1,11 +1,14 @@
 package com.anasdidi.uam.controller;
 
 import com.anasdidi.common.CommonConstants;
+import com.anasdidi.uam.dto.GetUserResDTO;
 import com.anasdidi.uam.dto.RegisterUserReqDTO.RegisterUserReqDTOPayload;
 import com.anasdidi.uam.dto.RegisterUserResDTO;
 import com.anasdidi.uam.dto.SearchUserResDTO;
+import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -26,4 +29,9 @@ public interface UserController {
       @RequestParam(required = false) String name,
       @RequestParam(required = false, defaultValue = "1") Integer pageNo,
       @RequestParam(required = false, defaultValue = "10") Integer totalRecordsPerPage);
+
+  @GetMapping("/{userId}")
+  ResponseEntity<GetUserResDTO> getUser(
+      @RequestHeader(name = CommonConstants.HEADER_CORR_ID) String correlationId,
+      @PathVariable UUID userId);
 }

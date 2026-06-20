@@ -4,14 +4,19 @@ import com.anasdidi.common.CommonConstants;
 import com.anasdidi.common.dto.PaginationDTO;
 import com.anasdidi.uam.UamConstants;
 import com.anasdidi.uam.controller.UserController;
+import com.anasdidi.uam.dto.GetUserReqDTO;
+import com.anasdidi.uam.dto.GetUserReqDTO.GetUserReqDTOPayload;
+import com.anasdidi.uam.dto.GetUserResDTO;
 import com.anasdidi.uam.dto.RegisterUserReqDTO;
 import com.anasdidi.uam.dto.RegisterUserReqDTO.RegisterUserReqDTOPayload;
 import com.anasdidi.uam.dto.RegisterUserResDTO;
 import com.anasdidi.uam.dto.SearchUserReqDTO;
 import com.anasdidi.uam.dto.SearchUserReqDTO.SearchUserReqDTOPayload;
 import com.anasdidi.uam.dto.SearchUserResDTO;
+import com.anasdidi.uam.service.impl.GetUserService;
 import com.anasdidi.uam.service.impl.RegisterUserService;
 import com.anasdidi.uam.service.impl.SearchUserService;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +29,7 @@ public class UserControllerV1 implements UserController {
 
   private final RegisterUserService registerUserService;
   private final SearchUserService searchUserService;
+  private final GetUserService getUserService;
 
   @Override
   public ResponseEntity<RegisterUserResDTO> registerUser(
@@ -48,6 +54,16 @@ public class UserControllerV1 implements UserController {
             .build())
         .build();
     var res = searchUserService.execute(req);
+    return ResponseEntity.status(res.getResponse().httpStatus).body(res);
+  }
+
+  @Override
+  public ResponseEntity<GetUserResDTO> getUser(String correlationId, UUID userId) {
+    var req = GetUserReqDTO.builder()
+        .correlationId(correlationId)
+        .payload(GetUserReqDTOPayload.builder().userId(userId).build())
+        .build();
+    var res = getUserService.execute(req);
     return ResponseEntity.status(res.getResponse().httpStatus).body(res);
   }
 }

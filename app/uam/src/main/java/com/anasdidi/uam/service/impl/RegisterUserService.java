@@ -1,8 +1,8 @@
 package com.anasdidi.uam.service.impl;
 
+import com.anasdidi.common.enums.ResourceEnum;
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.common.error.E02ResourceAlreadyExists;
-import com.anasdidi.common.error.E02ResourceAlreadyExists.Resource;
 import com.anasdidi.uam.dto.RegisterUserReqDTO;
 import com.anasdidi.uam.dto.RegisterUserResDTO;
 import com.anasdidi.uam.dto.RegisterUserResDTO.RegisterUserResDTOPayload;
@@ -31,7 +31,7 @@ public class RegisterUserService implements UamService<RegisterUserReqDTO, Regis
 
     if (userRepository.findByUsername(req.getPayload().getUsername()).isPresent()) {
       log.error("Username already exists! {}", req.getPayload().getUsername());
-      throw new E02ResourceAlreadyExists(Resource.USER);
+      throw new E02ResourceAlreadyExists(ResourceEnum.USER);
     }
 
     var entity = UserEntity.builder()

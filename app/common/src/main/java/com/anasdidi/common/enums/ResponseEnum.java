@@ -8,6 +8,7 @@ public enum ResponseEnum {
   S00_SUCCESS(HttpStatus.OK, "00", "Success"),
   E01_VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "E01", "Validation Error"),
   E02_RESOURCE_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "E02", "%s Already Exists"),
+  E03_RESOURCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "E03", "%s Not Found"),
   E99_UNEXPECTED_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "E99", "Unexpected Error");
 
   public final HttpStatus httpStatus;

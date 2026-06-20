@@ -5,12 +5,12 @@ import com.anasdidi.common.enums.ResponseEnum;
 import lombok.Getter;
 
 @Getter
-public class E02ResourceAlreadyExists extends ServiceError {
+public class E03ResourceNotFound extends ServiceError {
 
   private final ResourceEnum resource;
 
-  public E02ResourceAlreadyExists(ResourceEnum resource) {
-    super(ResponseEnum.E02_RESOURCE_ALREADY_EXISTS);
+  public E03ResourceNotFound(ResourceEnum resource) {
+    super(ResponseEnum.E03_RESOURCE_NOT_FOUND);
     this.resource = resource;
   }
 }

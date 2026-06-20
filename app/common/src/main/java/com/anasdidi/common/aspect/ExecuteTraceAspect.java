@@ -5,6 +5,7 @@ import com.anasdidi.common.dto.BaseReqDTO;
 import com.anasdidi.common.dto.BaseResDTO;
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.common.error.E02ResourceAlreadyExists;
+import com.anasdidi.common.error.E03ResourceNotFound;
 import com.anasdidi.common.error.E99UnexpectedError;
 import com.anasdidi.common.error.ServiceError;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,6 +67,10 @@ public class ExecuteTraceAspect {
     } catch (ServiceError e) {
       if (e instanceof E02ResourceAlreadyExists ee) {
         log.error("Resource already exists! {}", ee.getResource());
+
+        params = new Object[] {ee.getResource().resource};
+      } else if (e instanceof E03ResourceNotFound ee) {
+        log.error("Resource not found! {}", ee.getResource());
 
         params = new Object[] {ee.getResource().resource};
       } else if (e instanceof E99UnexpectedError ee) {

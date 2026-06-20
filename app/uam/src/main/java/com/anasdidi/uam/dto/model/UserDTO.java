@@ -1,5 +1,6 @@
 package com.anasdidi.uam.dto.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.Instant;
 import java.util.UUID;
@@ -20,7 +21,10 @@ import lombok.extern.jackson.Jacksonized;
 public class UserDTO {
 
   private String username;
+
+  @JsonIgnore
   private String password;
+
   private String name;
 
   // Metadata
