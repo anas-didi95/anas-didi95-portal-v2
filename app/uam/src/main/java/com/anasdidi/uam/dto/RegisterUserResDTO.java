@@ -1,14 +1,12 @@
 package com.anasdidi.uam.dto;
 
-import com.anasdidi.common.dto.BaseReqDTO;
+import com.anasdidi.common.dto.BaseResDTO;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
+import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.NonNull;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.jackson.Jacksonized;
@@ -21,8 +19,8 @@ import lombok.extern.jackson.Jacksonized;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
-public class HelloWorldReqDTO extends BaseReqDTO {
-  @Valid @NonNull private HelloWorldReqDTOPayload payload;
+public class RegisterUserResDTO extends BaseResDTO {
+  private RegisterUserResDTOPayload payload;
 
   @NoArgsConstructor
   @AllArgsConstructor
@@ -31,7 +29,7 @@ public class HelloWorldReqDTO extends BaseReqDTO {
   @Jacksonized
   @JsonIgnoreProperties(ignoreUnknown = true)
   @ToString
-  public static class HelloWorldReqDTOPayload {
-    @NotBlank private String name;
+  public static class RegisterUserResDTOPayload {
+    private UUID userId;
   }
 }

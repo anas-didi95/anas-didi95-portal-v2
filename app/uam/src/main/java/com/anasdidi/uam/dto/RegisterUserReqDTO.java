@@ -12,6 +12,7 @@ import lombok.NonNull;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.jackson.Jacksonized;
+import org.hibernate.validator.constraints.Length;
 
 @NoArgsConstructor
 @AllArgsConstructor
@@ -21,8 +22,8 @@ import lombok.extern.jackson.Jacksonized;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
-public class HelloWorldReqDTO extends BaseReqDTO {
-  @Valid @NonNull private HelloWorldReqDTOPayload payload;
+public class RegisterUserReqDTO extends BaseReqDTO {
+  @Valid @NonNull private RegisterUserReqDTOPayload payload;
 
   @NoArgsConstructor
   @AllArgsConstructor
@@ -31,7 +32,11 @@ public class HelloWorldReqDTO extends BaseReqDTO {
   @Jacksonized
   @JsonIgnoreProperties(ignoreUnknown = true)
   @ToString
-  public static class HelloWorldReqDTOPayload {
+  public static class RegisterUserReqDTOPayload {
+    @NotBlank @Length(max = 20) private String username;
+
+    @NotBlank private String password;
+
     @NotBlank private String name;
   }
 }

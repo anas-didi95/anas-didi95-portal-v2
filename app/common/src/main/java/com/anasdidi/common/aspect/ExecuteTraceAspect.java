@@ -4,6 +4,7 @@ import com.anasdidi.common.CommonUtils;
 import com.anasdidi.common.dto.BaseReqDTO;
 import com.anasdidi.common.dto.BaseResDTO;
 import com.anasdidi.common.enums.ResponseEnum;
+import com.anasdidi.common.error.E02ResourceAlreadyExists;
 import com.anasdidi.common.error.E99UnexpectedError;
 import com.anasdidi.common.error.ServiceError;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,8 +48,9 @@ public class ExecuteTraceAspect {
 
     var method = (MethodSignature) joinPoint.getSignature();
     Class<? extends BaseResDTO> returnClass = method.getReturnType();
-    var res =
-        objectMapper.convertValue(Map.of("correlationId", req.getCorrelationId()), returnClass);
+    var res = objectMapper.convertValue(Map.of(), returnClass);
+
+    Object[] params = null;
 
     try {
       MDC.put("traceId", req.getCorrelationId());
@@ -62,24 +64,35 @@ public class ExecuteTraceAspect {
       log.error(e.getMessage(), e);
       res.setResponse(ResponseEnum.E01_VALIDATION_ERROR);
     } catch (ServiceError e) {
-      if (e instanceof E99UnexpectedError ee) {
-        res.setResponse(ResponseEnum.E99_UNEXPECTED_ERROR);
+      if (e instanceof E02ResourceAlreadyExists ee) {
+        log.error("Resource already exists! {}", ee.getResource());
+
+        params = new Object[] {ee.getResource().resource};
+      } else if (e instanceof E99UnexpectedError ee) {
         log.error("Unexpected error! {}", ee.getReason());
 
         if (ee.getEx() != null) {
           log.error(ee.getEx().getMessage(), ee.getEx());
         }
       }
+
+      res.setResponse(e.getResponse());
     } catch (Exception e) {
       log.error(e.getMessage(), e);
       res.setResponse(ResponseEnum.E99_UNEXPECTED_ERROR);
     } finally {
       var timeTaken = System.currentTimeMillis() - timeStart;
+      res.setCorrelationId(req.getCorrelationId());
       res.setTraceId(timeStart + "");
       res.setTimestamp(OffsetDateTime.now());
       res.setTimeTaken(timeTaken);
       res.setResponseCode(res.getResponse().code);
-      res.setResponseDesc(res.getResponse().message);
+
+      if (params != null) {
+        res.setResponseDesc(res.getResponse().message.formatted(params));
+      } else {
+        res.setResponseDesc(res.getResponse().message);
+      }
 
       log.info("AOP Response: {}", res);
       log.info("AOP Time taken: {} ms", timeTaken);

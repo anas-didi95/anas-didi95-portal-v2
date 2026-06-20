@@ -3,22 +3,29 @@ package com.anasdidi.common.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.Column;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.Version;
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @MappedSuperclass
+@EntityListeners(AuditingEntityListener.class)
+@NoArgsConstructor
+@AllArgsConstructor
 @Data
 @SuperBuilder
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -43,7 +50,7 @@ public abstract class BaseEntity {
 
   @CreatedDate
   @Column(name = "CREATE_DT")
-  private OffsetDateTime createDate;
+  private Instant createDate;
 
   @LastModifiedBy
   @Column(name = "UPDATE_BY")
@@ -51,5 +58,5 @@ public abstract class BaseEntity {
 
   @LastModifiedDate
   @Column(name = "UPDATE_DT")
-  private OffsetDateTime updateDate;
+  private Instant updateDate;
 }

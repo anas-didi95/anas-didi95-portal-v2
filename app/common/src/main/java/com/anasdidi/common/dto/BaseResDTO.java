@@ -4,10 +4,14 @@ import com.anasdidi.common.enums.ResponseEnum;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.OffsetDateTime;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
+@NoArgsConstructor
+@AllArgsConstructor
 @Data
 @SuperBuilder
 @JsonIgnoreProperties(ignoreUnknown = true)
