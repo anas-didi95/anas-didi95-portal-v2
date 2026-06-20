@@ -23,5 +23,7 @@ public interface UserController {
   @GetMapping("")
   ResponseEntity<SearchUserResDTO> searchUser(
       @RequestHeader(name = CommonConstants.HEADER_CORR_ID) String correlationId,
-      @RequestParam(required = false) String name);
+      @RequestParam(required = false) String name,
+      @RequestParam(required = false, defaultValue = "1") Integer pageNo,
+      @RequestParam(required = false, defaultValue = "10") Integer totalRecordsPerPage);
 }

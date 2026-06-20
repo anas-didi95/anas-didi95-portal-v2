@@ -1,5 +1,6 @@
 package com.anasdidi.uam.service.impl;
 
+import com.anasdidi.common.dto.PaginationDTO;
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.dto.SearchUserReqDTO;
 import com.anasdidi.uam.dto.SearchUserResDTO;
@@ -15,6 +16,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
@@ -31,22 +33,33 @@ public class SearchUserService implements UamService<SearchUserReqDTO, SearchUse
   public SearchUserResDTO execute(@Valid SearchUserReqDTO req) {
     var res = SearchUserResDTO.builder();
 
-    var resultList = userRepository.findAll((root, query, builder) -> {
-      List<Predicate> list = new ArrayList<>();
+    var pageable = PageRequest.of(
+        req.getPayload().getPaginationDTO().getPageNo() - 1,
+        req.getPayload().getPaginationDTO().getTotalRecordsPerPage());
 
-      var name = req.getPayload().getName();
-      if (StringUtils.isNoneBlank(name)) {
-        log.debug("like name={}", name);
-        list.add(builder.like(root.get("name"), "%" + name + "%"));
-      }
+    var search = userRepository.findAll(
+        (root, query, builder) -> {
+          List<Predicate> list = new ArrayList<>();
 
-      return builder.and(list);
-    });
+          var name = req.getPayload().getName();
+          if (StringUtils.isNoneBlank(name)) {
+            log.debug("like name={}", name);
+            list.add(builder.like(root.get("name"), "%" + name + "%"));
+          }
+
+          return builder.and(list);
+        },
+        pageable);
 
     var payload = SearchUserResDTOPayload.builder()
-        .resultList(resultList.stream()
-            .map(o -> objectMapper.convertValue(o, UserDTO.class))
-            .toList())
+        .resultList(
+            search.get().map(o -> objectMapper.convertValue(o, UserDTO.class)).toList())
+        .pagination(PaginationDTO.builder()
+            .pageNo(req.getPayload().getPaginationDTO().getPageNo())
+            .totalRecordsPerPage(req.getPayload().getPaginationDTO().getTotalRecordsPerPage())
+            .totalPages(search.getTotalPages())
+            .totalRecords(search.getTotalElements())
+            .build())
         .build();
 
     return res.response(ResponseEnum.S00_SUCCESS).payload(payload).build();

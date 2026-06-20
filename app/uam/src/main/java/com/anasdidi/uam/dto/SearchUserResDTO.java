@@ -1,6 +1,7 @@
 package com.anasdidi.uam.dto;
 
 import com.anasdidi.common.dto.BaseResDTO;
+import com.anasdidi.common.dto.PaginationDTO;
 import com.anasdidi.uam.dto.model.UserDTO;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
@@ -32,5 +33,6 @@ public class SearchUserResDTO extends BaseResDTO {
   @ToString
   public static class SearchUserResDTOPayload {
     private List<UserDTO> resultList;
+    private PaginationDTO pagination;
   }
 }

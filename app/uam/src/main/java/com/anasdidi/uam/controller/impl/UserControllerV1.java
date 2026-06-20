@@ -1,6 +1,7 @@
 package com.anasdidi.uam.controller.impl;
 
 import com.anasdidi.common.CommonConstants;
+import com.anasdidi.common.dto.PaginationDTO;
 import com.anasdidi.uam.UamConstants;
 import com.anasdidi.uam.controller.UserController;
 import com.anasdidi.uam.dto.RegisterUserReqDTO;
@@ -34,10 +35,17 @@ public class UserControllerV1 implements UserController {
   }
 
   @Override
-  public ResponseEntity<SearchUserResDTO> searchUser(String correlationId, String name) {
+  public ResponseEntity<SearchUserResDTO> searchUser(
+      String correlationId, String name, Integer pageNo, Integer totalRecordsPerPage) {
     var req = SearchUserReqDTO.builder()
         .correlationId(correlationId)
-        .payload(SearchUserReqDTOPayload.builder().name(name).build())
+        .payload(SearchUserReqDTOPayload.builder()
+            .name(name)
+            .paginationDTO(PaginationDTO.builder()
+                .pageNo(pageNo)
+                .totalRecordsPerPage(totalRecordsPerPage)
+                .build())
+            .build())
         .build();
     var res = searchUserService.execute(req);
     return ResponseEntity.status(res.getResponse().httpStatus).body(res);
