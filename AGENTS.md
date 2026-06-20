@@ -38,20 +38,31 @@ app/
 ├── common/              — Library JAR (com.anasdidi.common.*)
 │   ├── CommonConstants   — API_V1=/v1, HEADER_CORR_ID=App-Correlation-Id
 │   ├── CommonUtils       — ObjectMapper factory (FAIL_ON_UNKNOWN_PROPERTIES=false)
+│   ├── config/CommonConfig — @EnableJpaAuditing, ObjectMapper @Bean, AuditorAware
+│   ├── entity/BaseEntity  — abstract @MappedSuperclass with UUID id, audit columns, @Version
 │   ├── dto/
-│   │   ├── BaseReqDTO    — abstract @Data @SuperBuilder @Jacksonized with @NotBlank correlationId
-│   │   └── BaseResDTO    — abstract @Data @SuperBuilder @Jacksonized with traceId, timestamp, etc.
-│   ├── enums/ResponseEnum — S00_SUCCESS, E01_VALIDATION_ERROR, E99_UNEXPECTED_ERROR
-│   ├── service/IBaseService — @Validated interface: B execute(@Valid A req) (synchronous)
-│   ├── aspect/ExecuteTraceAspect — @Around IBaseService.execute() → injects traceId/timestamp
-│   └── error/             — ServiceError (abstract), E99UnexpectedError
+│   │   ├── BaseReqDTO     — abstract with @NotBlank correlationId
+│   │   ├── BaseResDTO     — abstract with traceId, timestamp, responseCode/Desc
+│   │   └── PaginationDTO  — pageNo, totalRecordsPerPage, totalPages, totalRecords
+│   ├── enums/ResponseEnum — S00_SUCCESS..E99_UNEXPECTED_ERROR (each carries httpStatus, code, message)
+│   ├── enums/ResourceEnum — USER
+│   ├── service/IBaseService — @Validated: B execute(@Valid A req)
+│   ├── aspect/ExecuteTraceAspect — @Around IBaseService.execute() → sets traceId/timestamp/response via MDC
+│   └── error/             — ServiceError (abstract), E02/E03/E99UnexpectedError
 └── uam/                 — Spring Boot app (com.anasdidi.uam.*)
-    ├── UamApplication    — entrypoint, scanBasePackages="com.anasdidi"
+    ├── UamApplication    — @SpringBootApplication(scanBasePackages="com.anasdidi")
     ├── UamConstants      — CONTEXT_PATH=/uam
-    ├── config/UamConfig  — ObjectMapper @Bean
-    ├── controller/       — interface-first: interface declares @GetMapping, impl is @RestController
-    ├── service/          — UamService<A,B> extends IBaseService<A,B>
-    └── dto/              — extends BaseReqDTO/BaseResDTO with nested payload pattern
+    ├── config/UamConfig  — empty @Configuration
+    ├── controller/       — interface-first: interface declares @GetMapping etc., impl is @RestController
+    │   ├── HelloWorldController (interface)
+    │   └── UserController (interface)
+    ├── controller/impl/  — HelloWorldControllerV1, UserControllerV1
+    ├── service/UamService<A,B> extends IBaseService<A,B>
+    ├── service/impl/     — HelloWorldService, RegisterUserService, SearchUserService, GetUserService
+    ├── dto/              — extends BaseReqDTO/BaseResDTO with nested payload pattern
+    ├── dto/model/        — UserDTO
+    ├── entity/UserEntity — extends BaseEntity, maps T_USER
+    └── repository/UserRepository — JpaRepository + JpaSpecificationExecutor
 ```
 
 **Module dependency**: `common` → `uam` (one-way). A change in `common` needs `./mvnw compile -pl uam -am` to rebuild consumers.
@@ -66,7 +77,12 @@ app/
 - **ExecuteTraceAspect** (`common`) intercepts `IBaseService.execute()` via `@Around`. Sets MDC traceId/spanId/signature, populates `traceId`, `timestamp`, `timeTaken`, `responseCode`/`responseDesc` in `BaseResDTO` on return. Impl services only set `ResponseEnum`.
 - **Error handling**: Aspect catches `ConstraintViolationException` → `E01_VALIDATION_ERROR`, `ServiceError` → mapped to its `ResponseEnum` (e.g. `E99UnexpectedError` → `E99_UNEXPECTED_ERROR`), generic `Exception` → `E99_UNEXPECTED_ERROR`.
 - API path: `/uam` (`UamConstants.CONTEXT_PATH`) + `/v1` (`CommonConstants.API_V1`) + endpoint path.
-- Current endpoint: `GET /uam/v1/hello-world/greeting?name=...` (requires `App-Correlation-Id` header).
+- All endpoints require `App-Correlation-Id` header.
+- Current endpoints:
+  - `GET    /uam/v1/hello-world/greeting?name=...`
+  - `POST   /uam/v1/user/register` (body: `RegisterUserReqDTOPayload`)
+  - `GET    /uam/v1/user?name=&pageNo=1&totalRecordsPerPage=10`
+  - `GET    /uam/v1/user/{userId}`
 
 ---
 
