@@ -1,70 +1,61 @@
 # Code Review Summary
 
-**Scope**: Staged changes (11 files) — new `GET /uam/v1/users/{userId}` endpoint, `E03ResourceNotFound` error, `ResourceEnum` refactor
-**Overall risk**: Medium
+**Scope**: Staged changes — `ResponseEnum.java` (HTTP status corrections + new `S01_CREATED` enum) and `RegisterUserService.java` (return `S01_CREATED` instead of `S00_SUCCESS`)
+**Overall risk**: High — tests will fail on `verify`
 **Verdict**: Request changes
-
----
 
 ## Findings
 
-### [P1] Security: Password hash leaked in user API response
+### [P1] High — `RegisterUserServiceTests` assert wrong enum and response code/desc after `S01_CREATED` change
 
-- **Location**:
-  - `app/uam/src/main/java/com/anasdidi/uam/dto/model/UserDTO.java:23`
-  - `app/uam/src/main/java/com/anasdidi/uam/service/impl/GetUserService.java:308`
-  - `app/uam/src/main/java/com/anasdidi/uam/service/impl/SearchUserService.java:56` (pre-existing instance of same pattern)
-- **Why it matters**: `UserDTO` includes a `password` field and `objectMapper.convertValue(result, UserDTO.class)` copies the entity's password hash directly into the API response. The `GET /uam/v1/users/{userId}` endpoint (and the existing search endpoint) will expose `password` in the JSON response body. The app has no authentication (`spring-boot-starter-security` is commented out), so any caller can retrieve password hashes.
-- **Evidence**: `UserDTO.java:23` declares `private String password;` (no `@JsonIgnore`). `UserEntity.java:29-30` has `@Column(name = "PWD") private String password;`. `objectMapper.convertValue` copies all matching fields by name. The same issue exists in `SearchUserService` (pre-existing).
-- **Fix**: Add `@JsonIgnore` to `UserDTO.password`. If the password is never needed in API responses, remove the field from `UserDTO` entirely. The `RegisterUserResDTO` does not include it — the get/search endpoints should follow the same pattern.
+- **Location**: `app/uam/src/test/java/com/anasdidi/uam/service/impl/RegisterUserServiceTests.java:46-51`
+- **Why it matters**: `RegisterUserService` now returns `S01_CREATED` (code `"01"`, desc `"Created"`), but the tests still assert `S00_SUCCESS` / `"00"` / `"Success"`. These assertions will fail, breaking `mvnw verify`.
+- **Evidence**:
+  - `RegisterUserService.java:47` — `return res.response(ResponseEnum.S01_CREATED).payload(payload).build();`
+  - Test line 46: `assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());` ← will get `S01_CREATED`
+  - Test line 50: `assertEquals("00", result.getResponseCode());` ← will get `"01"`
+  - Test line 51: `assertEquals("Success", result.getResponseDesc());` ← will get `"Created"`
+- **Fix**: Update `RegisterUserServiceTests.java` lines 46, 50, 51 to assert `S01_CREATED`, `"01"`, `"Created"`.
 
-### [P2] `orElseThrow` lambda throws instead of returning the exception
+- **Location**: `app/uam/src/test/java/com/anasdidi/uam/service/impl/RegisterUserServiceTests.java:307-309`
+- **Why it matters**: Same root cause — second test method making the same stale assertions.
+- **Evidence**: Lines 307-309 assert `S00_SUCCESS`, `"00"`, `"Success"` but will get `S01_CREATED`, `"01"`, `"Created"`.
+- **Fix**: Update same assertions in that test method.
 
-- **Location**: `app/uam/src/main/java/com/anasdidi/uam/service/impl/GetUserService.java:302-305`
-  ```java
-  var result = userRepository.findById(req.getPayload().getUserId()).orElseThrow(() -> {
-    log.error("User ID not found! {}", req.getPayload().getUserId());
-    throw new E03ResourceNotFound(ResourceEnum.USER);     // ← throws, should return
-  });
-  ```
-- **Why it matters**: `orElseThrow` expects a `Supplier<? extends Throwable>` whose `get()` returns the exception. Throwing inside the lambda works incidentally (the thrown exception propagates), but is semantically incorrect, confusing to maintainers, and will be flagged by static analysis tools (e.g., `throw inside a supplier` warnings).
-- **Evidence**: The JavaDoc for `Optional.orElseThrow` states: *"If a value is not present, throws the exception produced by the exception supplying function."* The supplier should *produce* (return), not *throw*.
-- **Fix**: Replace `throw` with `return`:
-  ```java
-  var result = userRepository.findById(req.getPayload().getUserId()).orElseThrow(() -> {
-    log.error("User ID not found! {}", req.getPayload().getUserId());
-    return new E03ResourceNotFound(ResourceEnum.USER);
-  });
-  ```
+### [P1] High — Controller test asserts `isBadRequest()` for `E02_RESOURCE_ALREADY_EXISTS` but HTTP status changed to `CONFLICT`
 
-### [P2] Missing tests for `GetUserService`
+- **Location**: `app/uam/src/test/java/com/anasdidi/uam/controller/impl/UserControllerV1Tests.java:145-161`
+- **Why it matters**: `E02_RESOURCE_ALREADY_EXISTS.httpStatus` was changed from `HttpStatus.BAD_REQUEST` (400) to `HttpStatus.CONFLICT` (409). The mock returns a DTO with this enum, and the controller calls `ResponseEntity.status(res.getResponse().httpStatus)`. The test asserts `status().isBadRequest()` which will return 200-series "expected 400 but got 409" failure.
+- **Evidence**:
+  - `ResponseEnum.java:11` — `E02_RESOURCE_ALREADY_EXISTS(HttpStatus.CONFLICT, "E02", ...)`
+  - `UserControllerV1.java:40` — `return ResponseEntity.status(res.getResponse().httpStatus).body(res);`
+  - `UserControllerV1Tests.java:158` — `.andExpect(status().isBadRequest())` ← will get 409
+- **Fix**: Change `.andExpect(status().isBadRequest())` to `.andExpect(status().isConflict())`.
 
-- **Location**: No test file exists for `GetUserService`
-- **Why it matters**: JaCoCo enforces ≥80% line coverage for `com.anasdidi.uam.service.impl` during `verify`. A new service class without tests risks lowering coverage below the threshold, causing build failures. Additionally, the new endpoint logic (entity lookup, not-found error, DTO mapping) has no automated validation.
-- **Evidence**: `app/uam/src/test/java/com/anasdidi/uam/service/impl/` contains `RegisterUserServiceTests.java` (314 lines) but nothing for `GetUserService`. The POM binds JaCoCo to `verify`.
-- **Fix**: Add `GetUserServiceTests` covering at minimum:
-  - `testGetUser_success` — valid UUID, found → S00_SUCCESS + payload
-  - `testGetUser_notFound` — valid UUID, not found → E03_RESOURCE_NOT_FOUND + null payload
-  - `testGetUser_nullPayload` — null payload → E01_VALIDATION_ERROR
-  - `testGetUser_missingCorrelationId` — empty correlationId → E01_VALIDATION_ERROR
-  Follow the exact pattern from `RegisterUserServiceTests` (`@SpringBootTest`, `@Transactional`, assertion patterns).
+### [P1] High — Controller test asserts `isBadRequest()` for `E03_RESOURCE_NOT_FOUND` but HTTP status changed to `NOT_FOUND`
 
-### [P3] `E03_RESOURCE_NOT_FOUND` uses HTTP 400 instead of 404
+- **Location**: `app/uam/src/test/java/com/anasdidi/uam/controller/impl/UserControllerV1Tests.java:244-259`
+- **Why it matters**: Same pattern. `E03_RESOURCE_NOT_FOUND.httpStatus` was changed from `BAD_REQUEST` to `NOT_FOUND` (404). The mock also changes via the enum. Test expects 400 but will get 404.
+- **Evidence**:
+  - `ResponseEnum.java:12` — `E03_RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "E03", ...)`
+  - `UserControllerV1Tests.java:257` — `.andExpect(status().isBadRequest())` ← will get 404
+- **Fix**: Change `.andExpect(status().isBadRequest())` to `.andExpect(status().isNotFound())`.
 
-- **Location**: `app/common/src/main/java/com/anasdidi/common/enums/ResponseEnum.java:48`
-  ```java
-  E03_RESOURCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "E03", "%s Not Found"),
-  ```
-- **Why it matters**: A "resource not found" condition is semantically HTTP 404 Not Found. Returning 400 Bad Request would mislead API clients and break REST conventions. However, this finding is downgraded because it follows the same convention as `E02_RESOURCE_ALREADY_EXISTS` (also uses 400 instead of the more appropriate 409 Conflict) — it is consistent with the existing error pattern, not a regression.
-- **Evidence**: `UserControllerV1.java:178` returns `ResponseEntity.status(res.getResponse().httpStatus).body(res)`, so the 400 propagates to the HTTP response.
-- **Fix** (deferrable): Change to `HttpStatus.NOT_FOUND`. If this is a deliberate project-wide convention (all errors use 4xx codes mapped to internal error codes), consider documenting the rationale. Recommend revisiting across all `ResponseEnum` entries as a follow-up task.
+### [P2] Medium — Controller tests use `S00_SUCCESS` and `isOk()` for register success mock, semantically inconsistent with real behavior
 
----
+- **Location**: `app/uam/src/test/java/com/anasdidi/uam/controller/impl/UserControllerV1Tests.java:60, 187`
+- **Why it matters**: The mock-based controller tests for register success build the response with `ResponseEnum.S00_SUCCESS` and assert `status().isOk()`. These tests won't fail (mocks bypass the real service), but they no longer reflect the actual behavior (register now returns 201 Created). This creates a gap between test scenarios and production behavior.
+- **Evidence**:
+  - Line 60: `.response(ResponseEnum.S00_SUCCESS)` in mock response builder
+  - Line 71: `.andExpect(status().isOk())`
+  - Real service now returns `S01_CREATED` → HTTP 201
+- **Fix**: Update the mock to use `ResponseEnum.S01_CREATED` and assert `status().isCreated()` for register success tests. Not a blocking issue since mocks are controlled, but contributes to test drift.
 
 ## Suggested Next Steps
 
-- [ ] Fix P1: Add `@JsonIgnore` to `UserDTO.password` (or remove the field)
-- [ ] Fix P2: Correct `throw` → `return` in `GetUserService.orElseThrow`
-- [ ] Fix P2: Add `GetUserServiceTests` with the cases listed above
-- [ ] Run `./mvnw spotless:apply && ./mvnw verify -pl uam -am` to confirm formatting + all tests + JaCoCo coverage
-- [ ] Consider reviewing `SearchUserService` for the same password leak (pre-existing, but worth fixing in the same pass)
+- [ ] Fix `RegisterUserServiceTests.java` assertions in both test methods (lines 46, 50, 51 and 307-309)
+- [ ] Fix `UserControllerV1Tests.java` test named `testRegisterUser_serviceReturnsE02_returnsBadRequest` — change to `isConflict()`
+- [ ] Fix `UserControllerV1Tests.java` test named `testGetUser_serviceReturnsE03_returnsBadRequest` — change to `isNotFound()`
+- [ ] (Optional) Update `testRegisterUser_success` and `testRegisterUser_jsonResponseStructure` in `UserControllerV1Tests.java` to use `S01_CREATED` and `isCreated()` for semantic correctness
+- [ ] Run `./mvnw test -pl uam -am` to confirm all tests pass after fixes
+- [ ] Run `./mvnw spotless:apply && ./mvnw verify` for full validation

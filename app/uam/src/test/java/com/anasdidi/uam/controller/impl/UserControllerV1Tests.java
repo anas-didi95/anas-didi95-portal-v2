@@ -57,7 +57,7 @@ class UserControllerV1Tests {
     var userId = UUID.randomUUID();
     var mockResponse = RegisterUserResDTO.builder()
         .correlationId(CORRELATION_ID)
-        .response(ResponseEnum.S00_SUCCESS)
+        .response(ResponseEnum.S01_CREATED)
         .payload(RegisterUserResDTOPayload.builder().userId(userId).build())
         .build();
 
@@ -68,7 +68,7 @@ class UserControllerV1Tests {
             .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"username\":\"john\",\"password\":\"pass123\",\"name\":\"John\"}"))
-        .andExpect(status().isOk())
+        .andExpect(status().isCreated())
         .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
         .andExpect(jsonPath("$.payload.userId").value(userId.toString()));
   }
@@ -155,7 +155,7 @@ class UserControllerV1Tests {
             .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"username\":\"john\",\"password\":\"pass123\",\"name\":\"John\"}"))
-        .andExpect(status().isBadRequest())
+        .andExpect(status().isConflict())
         .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
         .andExpect(jsonPath("$.payload").doesNotExist());
   }
@@ -184,7 +184,7 @@ class UserControllerV1Tests {
     var userId = UUID.randomUUID();
     var mockResponse = RegisterUserResDTO.builder()
         .correlationId(CORRELATION_ID)
-        .response(ResponseEnum.S00_SUCCESS)
+        .response(ResponseEnum.S01_CREATED)
         .payload(RegisterUserResDTOPayload.builder().userId(userId).build())
         .build();
 
@@ -195,7 +195,7 @@ class UserControllerV1Tests {
             .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"username\":\"john\",\"password\":\"pass123\",\"name\":\"John\"}"))
-        .andExpect(status().isOk())
+        .andExpect(status().isCreated())
         .andExpect(jsonPath("$.correlationId").isString())
         .andExpect(jsonPath("$.payload").isMap())
         .andExpect(jsonPath("$.payload.userId").isString());
@@ -254,7 +254,7 @@ class UserControllerV1Tests {
     mockMvc
         .perform(
             get(BASE_URL + "/" + userId).header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
-        .andExpect(status().isBadRequest())
+        .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
         .andExpect(jsonPath("$.payload").doesNotExist());
   }

@@ -44,6 +44,6 @@ public class RegisterUserService implements UamService<RegisterUserReqDTO, Regis
 
     var payload = RegisterUserResDTOPayload.builder().userId(entity.getId()).build();
 
-    return res.response(ResponseEnum.S00_SUCCESS).payload(payload).build();
+    return res.response(ResponseEnum.S01_CREATED).payload(payload).build();
   }
 }

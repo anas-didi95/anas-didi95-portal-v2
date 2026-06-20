@@ -43,12 +43,12 @@ class RegisterUserServiceTests {
     assertEquals("corr-123", result.getCorrelationId());
     assertNotNull(result.getPayload());
     assertNotNull(result.getPayload().getUserId());
-    assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());
+    assertEquals(ResponseEnum.S01_CREATED, result.getResponse());
     assertNotNull(result.getTraceId());
     assertNotNull(result.getTimestamp());
     assertNotNull(result.getTimeTaken());
-    assertEquals("00", result.getResponseCode());
-    assertEquals("Success", result.getResponseDesc());
+    assertEquals("01", result.getResponseCode());
+    assertEquals("Created", result.getResponseDesc());
   }
 
   @Test
@@ -304,9 +304,9 @@ class RegisterUserServiceTests {
     assertEquals("corr-special", result.getCorrelationId());
     assertNotNull(result.getPayload());
     assertNotNull(result.getPayload().getUserId());
-    assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());
-    assertEquals("00", result.getResponseCode());
-    assertEquals("Success", result.getResponseDesc());
+    assertEquals(ResponseEnum.S01_CREATED, result.getResponse());
+    assertEquals("01", result.getResponseCode());
+    assertEquals("Created", result.getResponseDesc());
 
     var entity = userRepository.findByUsername("José!@#").orElseThrow();
     assertEquals("JOSÉ!@#$%^&*()", entity.getName());
