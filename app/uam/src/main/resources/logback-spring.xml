@@ -35,7 +35,7 @@
 		</rollingPolicy>
 	</appender>
 
-	<logger name="com.anasadidi" level="DEBUG" />
+	<logger name="com.anasdidi" level="${LOG_LEVEL:-DEBUG}" />
 
 	<!-- Root logger at INFO level -->
 	<root level="INFO">
