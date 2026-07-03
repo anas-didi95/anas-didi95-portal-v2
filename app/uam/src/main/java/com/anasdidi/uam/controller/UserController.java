@@ -5,9 +5,12 @@ import com.anasdidi.uam.dto.GetUserResDTO;
 import com.anasdidi.uam.dto.RegisterUserReqDTO.RegisterUserReqDTOPayload;
 import com.anasdidi.uam.dto.RegisterUserResDTO;
 import com.anasdidi.uam.dto.SearchUserResDTO;
+import com.anasdidi.uam.dto.UpdateUserReqDTO.UpdateUserReqDTOPayload;
+import com.anasdidi.uam.dto.UpdateUserResDTO;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,4 +37,11 @@ public interface UserController {
   ResponseEntity<GetUserResDTO> getUser(
       @RequestHeader(name = CommonConstants.HEADER_CORR_ID) String correlationId,
       @PathVariable UUID userId);
+
+  @PatchMapping("/{userId}")
+  ResponseEntity<UpdateUserResDTO> updateUser(
+      @RequestHeader(name = CommonConstants.HEADER_CORR_ID) String correlationId,
+      @PathVariable UUID userId,
+      @RequestParam Integer version,
+      @RequestBody UpdateUserReqDTOPayload body);
 }

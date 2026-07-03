@@ -70,7 +70,7 @@ public class ExecuteTraceAspect {
 
         params = new Object[] {ee.getResource().resource};
       } else if (e instanceof E03ResourceNotFound ee) {
-        log.error("Resource not found! {}", ee.getResource());
+        log.error("Resource not found! {},{}", ee.getResource(), ee.getParam());
 
         params = new Object[] {ee.getResource().resource};
       } else if (e instanceof E99UnexpectedError ee) {

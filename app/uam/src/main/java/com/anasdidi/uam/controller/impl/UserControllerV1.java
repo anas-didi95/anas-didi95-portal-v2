@@ -13,9 +13,13 @@ import com.anasdidi.uam.dto.RegisterUserResDTO;
 import com.anasdidi.uam.dto.SearchUserReqDTO;
 import com.anasdidi.uam.dto.SearchUserReqDTO.SearchUserReqDTOPayload;
 import com.anasdidi.uam.dto.SearchUserResDTO;
+import com.anasdidi.uam.dto.UpdateUserReqDTO;
+import com.anasdidi.uam.dto.UpdateUserReqDTO.UpdateUserReqDTOPayload;
+import com.anasdidi.uam.dto.UpdateUserResDTO;
 import com.anasdidi.uam.service.impl.GetUserService;
 import com.anasdidi.uam.service.impl.RegisterUserService;
 import com.anasdidi.uam.service.impl.SearchUserService;
+import com.anasdidi.uam.service.impl.UpdateUserService;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +34,7 @@ public class UserControllerV1 implements UserController {
   private final RegisterUserService registerUserService;
   private final SearchUserService searchUserService;
   private final GetUserService getUserService;
+  private final UpdateUserService updateUserService;
 
   @Override
   public ResponseEntity<RegisterUserResDTO> registerUser(
@@ -64,6 +69,19 @@ public class UserControllerV1 implements UserController {
         .payload(GetUserReqDTOPayload.builder().userId(userId).build())
         .build();
     var res = getUserService.execute(req);
+    return ResponseEntity.status(res.getResponse().httpStatus).body(res);
+  }
+
+  @Override
+  public ResponseEntity<UpdateUserResDTO> updateUser(
+      String correlationId, UUID userId, Integer version, UpdateUserReqDTOPayload body) {
+    var req = UpdateUserReqDTO.builder()
+        .correlationId(correlationId)
+        .userId(userId)
+        .version(version)
+        .payload(body)
+        .build();
+    var res = updateUserService.execute(req);
     return ResponseEntity.status(res.getResponse().httpStatus).body(res);
   }
 }

@@ -3,6 +3,7 @@ package com.anasdidi.uam.controller.impl;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -15,9 +16,12 @@ import com.anasdidi.uam.dto.GetUserResDTO.GetUserResDTOPayload;
 import com.anasdidi.uam.dto.RegisterUserReqDTO;
 import com.anasdidi.uam.dto.RegisterUserResDTO;
 import com.anasdidi.uam.dto.RegisterUserResDTO.RegisterUserResDTOPayload;
+import com.anasdidi.uam.dto.UpdateUserResDTO;
+import com.anasdidi.uam.dto.UpdateUserResDTO.UpdateUserResDTOPayload;
 import com.anasdidi.uam.dto.model.UserDTO;
 import com.anasdidi.uam.service.impl.GetUserService;
 import com.anasdidi.uam.service.impl.RegisterUserService;
+import com.anasdidi.uam.service.impl.UpdateUserService;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +41,9 @@ class UserControllerV1Tests {
 
   @Mock
   private GetUserService getUserService;
+
+  @Mock
+  private UpdateUserService updateUserService;
 
   @InjectMocks
   private UserControllerV1 userControllerV1;
@@ -276,5 +283,105 @@ class UserControllerV1Tests {
         .andExpect(status().isInternalServerError())
         .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
         .andExpect(jsonPath("$.payload").doesNotExist());
+  }
+
+  @Test
+  void testUpdateUser_success() throws Exception {
+    var userId = UUID.randomUUID();
+    var mockResponse = UpdateUserResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.S00_SUCCESS)
+        .payload(UpdateUserResDTOPayload.builder().userId(userId).build())
+        .build();
+
+    when(updateUserService.execute(any(com.anasdidi.uam.dto.UpdateUserReqDTO.class)))
+        .thenReturn(mockResponse);
+
+    mockMvc
+        .perform(patch(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .param("version", "1")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Updated Name\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload.userId").value(userId.toString()));
+  }
+
+  @Test
+  void testUpdateUser_missingCorrelationId() throws Exception {
+    var userId = UUID.randomUUID();
+    mockMvc
+        .perform(patch(BASE_URL + "/" + userId)
+            .param("version", "1")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Updated Name\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void testUpdateUser_missingVersion() throws Exception {
+    var userId = UUID.randomUUID();
+    mockMvc
+        .perform(patch(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Updated Name\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void testUpdateUser_serviceReturnsE03() throws Exception {
+    var userId = UUID.randomUUID();
+    var mockResponse = UpdateUserResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.E03_RESOURCE_NOT_FOUND)
+        .build();
+
+    when(updateUserService.execute(any(com.anasdidi.uam.dto.UpdateUserReqDTO.class)))
+        .thenReturn(mockResponse);
+
+    mockMvc
+        .perform(patch(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .param("version", "1")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Updated Name\"}"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload").doesNotExist());
+  }
+
+  @Test
+  void testUpdateUser_serviceReturnsE99() throws Exception {
+    var userId = UUID.randomUUID();
+    var mockResponse = UpdateUserResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.E99_UNEXPECTED_ERROR)
+        .build();
+
+    when(updateUserService.execute(any(com.anasdidi.uam.dto.UpdateUserReqDTO.class)))
+        .thenReturn(mockResponse);
+
+    mockMvc
+        .perform(patch(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .param("version", "1")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Updated Name\"}"))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload").doesNotExist());
+  }
+
+  @Test
+  void testUpdateUser_emptyBody() throws Exception {
+    var userId = UUID.randomUUID();
+    mockMvc
+        .perform(patch(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .param("version", "1")
+            .contentType(MediaType.APPLICATION_JSON))
+        .andExpect(status().isBadRequest());
   }
 }

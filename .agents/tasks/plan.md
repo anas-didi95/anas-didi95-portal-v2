@@ -1,186 +1,174 @@
-# Plan: Address code review findings for staged changes
+# Plan: Fix Uppercase Inconsistency & Add Missing Tests for Update User
 
 ## Objective
 
-Fix the findings raised in `.agents/tasks/review.md` — resolve the P1 password leak, P2 `orElseThrow` misuse, and P2 missing tests. Optional: apply the same password fix to the pre-existing `SearchUserService`.
+Fix the name-uppercase inconsistency in `UpdateUserService`, then add comprehensive service (integration) and controller (Web MVC) tests for the update user flow. Ensure 80% line coverage is sustained.
 
 ## Requirements Snapshot
 
-- **R1 (P1 Security):** `UserDTO.password` must not be serialized in API responses. The `GET /uam/v1/users/{userId}` endpoint must not expose password hashes.
-- **R2 (P2 Correctness):** `GetUserService.orElseThrow` lambda must `return` the exception, not `throw` it.
-- **R3 (P2 Coverage):** `GetUserService` must have a test class with ≥80% line coverage, following the same `@SpringBootTest` + `@Transactional` pattern as `RegisterUserServiceTests`.
-- **R4 (Nice-to-have):** Apply the same `@JsonIgnore` fix to `SearchUserService`'s use of `objectMapper.convertValue` to `UserDTO` (pre-existing issue in the same code path).
+- **R1 (Uppercase Fix):** `UpdateUserService` must uppercase the name before persisting, matching `RegisterUserService` behavior.
+- **R2 (Service Tests — Integration):** Using `@SpringBootTest` with in-memory H2, cover success, not-found (E03), and validation error (E01) scenarios.
+- **R3 (Controller Tests — Web MVC):** Using `MockMvcBuilders.standaloneSetup()` with mocked services, cover success, missing headers/params/body, and service-error HTTP status mappings.
+- **R4 (Coverage):** JaCoCo 80% line coverage for `com.anasdidi.uam.service.impl` and `com.anasdidi.uam.controller.impl` must be maintained.
 
 ## Scope
 
-- Add `@JsonIgnore` to `UserDTO.password`
-- Fix `throw` → `return` in `GetUserService.orElseThrow` lambda
-- Create `GetUserServiceTests` covering success, not-found, and validation-error cases
-- Optionally: add `@JsonIgnore` to any other sensitive fields in `UserDTO` that should not leak
+- Fix `UpdateUserService.java` — add `.toUpperCase()` for name.
+- Create `UpdateUserServiceTests.java` — ~8 test methods.
+- Add `updateUser` test methods to existing `UserControllerV1Tests.java` — ~6 test methods.
+- Run `spotless:apply` and `verify` to confirm formatting and coverage.
 
 ## Assumptions and Constraints
 
-- All changes must pass `./mvnw spotless:apply && ./mvnw verify -pl uam -am`
-- Tests must use the same patterns as `RegisterUserServiceTests` (`@SpringBootTest`, `@Transactional`, assertion style)
-- JaCoCo must maintain ≥80% line coverage for `com.anasdidi.uam.service.impl`
-- The existing `SearchUserService` password leak is pre-existing; fixing it is desirable but out of scope unless explicitly included
+- All commands run from `app/` using the canonical `./mvnw`.
+- Existing tests for RegisterUser/GetUser/SearchUser pass and must not be broken.
+- `UserControllerV1Tests` already uses `@ExtendWith(MockitoExtension.class)` with `MockMvcBuilders.standaloneSetup()` — new tests follow the same pattern.
+- `UpdateUserReqDTO` has `@NotNull UUID userId`, `@NotNull Integer version`, `@Valid @NotNull UpdateUserReqDTOPayload payload` (with `@NotBlank String name`).
+- JaCoCo runs during `verify` only; `test` alone does not enforce coverage.
 
 ## Risks and Areas Requiring Care
 
-- If `UserDTO.password` is used anywhere else in the codebase that needs it serialized, `@JsonIgnore` would break that usage. Need to verify only the service layer uses it for entity→DTO mapping.
-- `GetUserServiceTests` must use unique test data to avoid cross-test contamination (even with `@Transactional`).
-- The `E03_RESOURCE_NOT_FOUND` HTTP status (P3 finding) is a wider design decision — out of scope for this plan.
+- Adding `.toUpperCase()` is a one-line change but could affect existing stored data semantics (none exist in test H2).
+- The `E03_RESOURCE_NOT_FOUND` message is `"%s Not Found"` → formatted as `"User Not Found"` — verify responseDesc assertion.
+- The `PatchMapping` uses `@RequestParam Integer version` (query param) not path variable — controller tests must pass it correctly.
 
 ## Sub-Tasks
 
-### Sub-Task 1: Add `@JsonIgnore` to `UserDTO.password`
+### Sub-Task 1: Fix name uppercase in UpdateUserService
 
 - **Status:** Pending
-- **Objective:** Prevent password hash from being serialized in API responses for all endpoints that return `UserDTO`.
+- **Objective:** Make `UpdateUserService.execute()` uppercase the user's name before saving, matching `RegisterUserService`.
 - **Related Requirements:** R1
 - **Dependencies and Preconditions:** None
-- **In Scope for This Sub-Task:**
-  - Add `@com.fasterxml.jackson.annotation.JsonIgnore` to the `password` field in `UserDTO.java`
-- **Out of Scope for This Sub-Task:**
-  - Changing `UserEntity`, the database schema, or any other DTO
-  - Adding/removing `password` from `UserDTO` entirely (minimal change only)
+- **In Scope for This Sub-Task:** Edit `UpdateUserService.java` line 37: add `.toUpperCase()` to `req.getPayload().getName()`.
+- **Out of Scope for This Sub-Task:** Any other behavioral changes, refactoring, or test additions.
 - **Instructions:**
-  1. Open `app/uam/src/main/java/com/anasdidi/uam/dto/model/UserDTO.java`
-  2. Add `import com.fasterxml.jackson.annotation.JsonIgnore;`
-  3. Annotate `private String password;` with `@JsonIgnore`
+  1. Read `UpdateUserService.java`.
+  2. Change `entity.setName(req.getPayload().getName())` → `entity.setName(req.getPayload().getName().toUpperCase())`.
+  3. Run `./mvnw spotless:apply -pl uam` to format.
 - **Acceptance Criteria:**
-  - `password` field annotated with `@JsonIgnore`
-  - Compiles and passes `spotless:check`
+  - `UpdateUserService` uppercases name before `userRepository.save(entity)`.
 - **Cautionary Points (Risks & Edge Cases):**
-  - If any code path relies on deserializing `password` from JSON into `UserDTO`, `@JsonIgnore` will cause it to be `null`. Grep the codebase to check: `grep -r "UserDTO" app/ --include="*.java"` to verify usage — password is only set via `objectMapper.convertValue(entity, UserDTO.class)` which works field-to-field, not via JSON deserialization, so this is safe.
-- **Implementation Suggestions:** None
-- **Testing Suggestions:**
-  - `./mvnw compile -pl uam -am` to verify compilation
-  - `./mvnw spotless:apply -pl uam -am` to format
-  - After all sub-tasks are done, run full verification
-- **Done When:** `@JsonIgnore` is added, code compiles, and Spotless passes
+  - Already-uppercased names are harmless idempotent calls.
+  - Lombok `@Slf4j` and other annotations are unaffected.
+- **Implementation Suggestions:** No new imports needed; `String.toUpperCase()` is JDK built-in.
+- **Testing Suggestions:** Run `./mvnw compile -pl uam -am` to confirm compilation passes.
+- **Done When:** The change is committed and `./mvnw compile -pl uam -am` passes.
 
-### Sub-Task 2: Fix `orElseThrow` lambda in `GetUserService`
+### Sub-Task 2: Add UpdateUserServiceTests
 
 - **Status:** Pending
-- **Objective:** Correct the `orElseThrow` supplier to `return` the exception instead of `throw`ing it.
-- **Related Requirements:** R2
-- **Dependencies and Preconditions:** None
+- **Objective:** Create integration tests for `UpdateUserService` covering success, not-found, and validation error scenarios.
+- **Related Requirements:** R2, R4
+- **Dependencies and Preconditions:** Sub-Task 1 (uppercase fix) must be completed first so tests assert uppercased name.
 - **In Scope for This Sub-Task:**
-  - Replace `throw new E03ResourceNotFound(...)` with `return new E03ResourceNotFound(...)` in the `orElseThrow` lambda of `GetUserService.execute()`
-- **Out of Scope for This Sub-Task:**
-  - Any other changes to `GetUserService`
+  - Create `src/test/java/com/anasdidi/uam/service/impl/UpdateUserServiceTests.java`.
+  - Test methods:
+    1. `testUpdateUser_success` — seed user, update name, assert S00_SUCCESS + userId + name stored uppercased.
+    2. `testUpdateUser_notFound` — use non-existent userId+version, assert E03_RESOURCE_NOT_FOUND, null payload.
+    3. `testUpdateUser_versionMismatch` — seed user, call with wrong version, assert E03_RESOURCE_NOT_FOUND.
+    4. `testUpdateUser_nullPayload` — use `ObjenesisStd` to set `payload = null`, assert E01_VALIDATION_ERROR.
+    5. `testUpdateUser_missingCorrelationId` — empty correlationId, assert E01_VALIDATION_ERROR.
+    6. `testUpdateUser_nullName` — `name = null` in payload, assert E01_VALIDATION_ERROR.
+    7. `testUpdateUser_blankName` — `name = ""` in payload, assert E01_VALIDATION_ERROR.
+    8. `testUpdateUser_nameUppercased` — update with mixed-case name, assert entity name in DB is uppercased.
+- **Out of Scope for This Sub-Task:** Controller tests.
 - **Instructions:**
-  1. Open `app/uam/src/main/java/com/anasdidi/uam/service/impl/GetUserService.java`
-  2. Change line 304 from `throw new E03ResourceNotFound(ResourceEnum.USER);` to `return new E03ResourceNotFound(ResourceEnum.USER);`
-  3. Since `return` replaces `throw`, verify the lambda still compiles — the `orElseThrow` signature expects `Supplier<? extends X>` where `X extends Throwable`, and returning the exception instance satisfies this.
+  - Follow the pattern in `RegisterUserServiceTests` / `GetUserServiceTests`:
+    - `@SpringBootTest`, `@Transactional` on each test method.
+    - `@Autowired UpdateUserService`, `@Autowired UserRepository`.
+    - Use `ObjenesisStd` + `ReflectionTestUtils` for null-payload tests.
+  - For the success test, verify:
+    - `ResponseEnum.S00_SUCCESS`, `"00"`, `"Success"`.
+    - `getPayload()` is not null and contains `userId`.
+    - Fetch entity from DB and assert `.getName()` is uppercased.
+  - For the nameUppercased test, seed with original name `"John Doe"`, update with `"Jane smith"`, assert entity name in DB is `"JANE SMITH"`.
 - **Acceptance Criteria:**
-  - The lambda returns the exception instance instead of throwing it
-  - Code compiles and Spotless check passes
+  - All 8 tests pass with `./mvnw test -pl uam -am -Dtest=UpdateUserServiceTests`.
 - **Cautionary Points (Risks & Edge Cases):**
-  - Both `throw` and `return` produce the same runtime behavior (the exception propagates), but `return` is semantically correct. No behavioral change.
+  - The `findByIdAndVersion` returns `Optional.empty()` for both non-existent id AND wrong version — both map to `E03_RESOURCE_NOT_FOUND`.
+  - `@NotBlank` rejects `null`, `""`, and `"   "` — one test using `""` covers this group since the aspect translates `ConstraintViolationException` → `E01_VALIDATION_ERROR`.
 - **Implementation Suggestions:**
-  ```java
-  var result = userRepository.findById(req.getPayload().getUserId()).orElseThrow(() -> {
-    log.error("User ID not found! {}", req.getPayload().getUserId());
-    return new E03ResourceNotFound(ResourceEnum.USER);
-  });
-  ```
-- **Testing Suggestions:**
-  - `./mvnw compile -pl uam -am` to verify compilation
-- **Done When:** The `throw` is replaced with `return` and the code compiles
+  - Helper method to seed a user (similar to `SearchUserServiceTests.seedUser()`).
+  - Helper method to build a valid `UpdateUserReqDTO`.
+- **Testing Suggestions:** Run `./mvnw test -pl uam -am -Dtest=UpdateUserServiceTests`.
+- **Done When:** All 8 tests pass and `spotless:apply` has been run.
 
-### Sub-Task 3: Add `GetUserServiceTests`
+### Sub-Task 3: Add updateUser controller tests to UserControllerV1Tests
 
 - **Status:** Pending
-- **Objective:** Ensure the new `GetUserService` is covered by tests meeting JaCoCo's ≥80% threshold.
-- **Related Requirements:** R3
-- **Dependencies and Preconditions:** Sub-Tasks 1 and 2 should be complete (so tests validate the final code).
+- **Objective:** Add Web MVC controller tests for the PATCH `/user/{userId}` endpoint covering success, error, and validation scenarios.
+- **Related Requirements:** R3, R4
+- **Dependencies and Preconditions:** Sub-Task 1 (uppercase fix). Sub-Task 2 can be done in parallel but order does not matter.
 - **In Scope for This Sub-Task:**
-  - Create `app/uam/src/test/java/com/anasdidi/uam/service/impl/GetUserServiceTests.java`
-  - Test cases:
-    1. `testGetUser_success` — register a user, then fetch by ID → S00_SUCCESS, payload with matching data
-    2. `testGetUser_notFound` — random UUID → E03_RESOURCE_NOT_FOUND, null payload, `"User Not Found"` description
-    3. `testGetUser_nullPayload` — null payload (via ObjenesisStd + ReflectionTestUtils) → E01_VALIDATION_ERROR, null payload
-    4. `testGetUser_missingCorrelationId` — empty correlationId → E01_VALIDATION_ERROR, null payload
-    5. `testGetUser_nullUserId` — null userId in payload → E01_VALIDATION_ERROR
-- **Out of Scope for This Sub-Task:**
-  - Controller-level tests (existing pattern uses `MockMvcBuilders.standaloneSetup` for controller tests; those can be added separately)
-  - Integration tests beyond the service layer
+  - Add to existing `UserControllerV1Tests.java`:
+    1. Mock field for `UpdateUserService`.
+    2. Test methods:
+       - `testUpdateUser_success` — mock S00_SUCCESS with payload, assert 200 OK + jsonPath assertions.
+       - `testUpdateUser_missingCorrelationId` — no header, assert 400 Bad Request.
+       - `testUpdateUser_missingVersion` — no `version` query param, assert 400 Bad Request.
+       - `testUpdateUser_serviceReturnsE03` — mock E03_RESOURCE_NOT_FOUND, assert 404 + null payload.
+       - `testUpdateUser_serviceReturnsE99` — mock E99_UNEXPECTED_ERROR, assert 500.
+       - `testUpdateUser_emptyBody` — no request body, assert 400 Bad Request.
+- **Out of Scope for This Sub-Task:** Service tests (Sub-Task 2).
 - **Instructions:**
-  - Mirror the structure of `RegisterUserServiceTests.java`:
-    - Annotations: `@SpringBootTest` (class-level), `@Transactional` (per test method)
-    - Autowire `GetUserService` and `UserRepository`
-    - Use `RegisterUserService` to seed test data, then fetch with `GetUserService`
-    - Assert on: `result.getCorrelationId()`, `result.getPayload()`, `result.getResponse()`, `result.getResponseCode()`, `result.getResponseDesc()`, `result.getTraceId()`, `result.getTimestamp()`, `result.getTimeTaken()`
-  - For the success test, seed a user via `RegisterUserService`, extract the ID from the register response, then call `GetUserService` with that ID. Assert that `username`, `name` match (but NOT password — it should be null due to `@JsonIgnore`).
-  - For the not-found test, use `UUID.randomUUID()` and expect `E03_RESOURCE_NOT_FOUND` with responseDesc `"User Not Found"`.
-  - For null-payload/null-correlationId tests, follow the exact `ObjenesisStd` + `ReflectionTestUtils` pattern from `RegisterUserServiceTests`.
-  - For null-userId test, build a request with payload where `userId` is not set (builder without `.userId(...)`) → `@NotNull` on `GetUserReqDTOPayload.userId` will trigger validation error.
+  - Follow the pattern in existing test methods within the same file:
+    - `@Mock private UpdateUserService updateUserService;` field.
+    - Inject via `@InjectMocks` (already present).
+    - Use `MockMvcRequestBuilders.patch(...)` for the PATCH call.
+    - URL: `BASE_URL + "/{userId}"` with `.param("version", "1")` for the query param.
+    - Request body: `{"name":"Updated Name"}`.
+  - Verify HTTP status via `.andExpect(status().isOk())`, `.isNotFound()`, etc.
+  - Verify JSON response fields via `.andExpect(jsonPath("$...")...)`.
 - **Acceptance Criteria:**
-  - All 6 test cases pass
-  - `./mvnw test -pl uam -am -Dtest=GetUserServiceTests` succeeds
-  - JaCoCo coverage for `com.anasdidi.uam.service.impl` stays ≥80%
+  - All 6 new controller tests pass alongside all existing tests.
 - **Cautionary Points (Risks & Edge Cases):**
-  - Use unique usernames per test to avoid collisions (e.g., `"getuser-test-success"`, `"getuser-test-notfound-setup"`)
-  - The success test creates a user via `RegisterUserService`, so the register test data must not collide with other test data in the same run
-  - `@Transactional` on the test method rolls back after each test, so no cleanup needed
-  - The test file must be in the exact package directory: `com/anasdidi/uam/service/impl/`
-- **Implementation Suggestions:** Use this as a template for the success test:
-  ```java
-  @Test
-  @Transactional
-  void testGetUser_success() {
-    String username = "getuser-success-" + UUID.randomUUID().toString().substring(0, 8);
-    var registerReq = RegisterUserReqDTO.builder()
-        .correlationId("corr-get-success")
-        .payload(RegisterUserReqDTOPayload.builder()
-            .username(username)
-            .password("pass123")
-            .name("Test User")
-            .build())
-        .build();
-    var registerRes = registerUserService.execute(registerReq);
-
-    var req = GetUserReqDTO.builder()
-        .correlationId("corr-get-success")
-        .payload(GetUserReqDTOPayload.builder()
-            .userId(registerRes.getPayload().getUserId())
-            .build())
-        .build();
-    GetUserResDTO result = getUserService.execute(req);
-
-    assertNotNull(result);
-    assertEquals("corr-get-success", result.getCorrelationId());
-    assertNotNull(result.getPayload());
-    assertNotNull(result.getPayload().getResult());
-    assertEquals(username, result.getPayload().getResult().getUsername());
-    assertEquals("TEST USER", result.getPayload().getResult().getName());
-    assertNull(result.getPayload().getResult().getPassword());  // @JsonIgnore
-    assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());
-    assertEquals("00", result.getResponseCode());
-    assertEquals("Success", result.getResponseDesc());
-  }
-  ```
+  - `@RequestParam Integer version` defaults to `required=true` so missing param → 400 from Spring before controller.
+  - The `UpdateUserReqDTO` builder sets `userId` and `version` at top level (not in payload) — controller test must include `.param("version", "1")`.
+  - `MockMvcRequestBuilders.patch(...)` requires `import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;` or use fully qualified name. Use the existing import style.
+- **Implementation Suggestions:**
+  - Add `import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;` at the top.
+  - Use `UUID.randomUUID()` for userId in success/error mock tests.
+  - Use `MediaType.APPLICATION_JSON` for content type.
 - **Testing Suggestions:**
-  ```bash
-  ./mvnw test -pl uam -am -Dtest=GetUserServiceTests
-  ```
-- **Done When:** All test cases pass, and `./mvnw verify -pl uam -am` passes (including JaCoCo)
+  - Run `./mvnw test -pl uam -am -Dtest=UserControllerV1Tests` to verify new controller tests.
+  - Then run the full service test suite alongside: `./mvnw test -pl uam -am -Dtest=UserControllerV1Tests,UpdateUserServiceTests`.
+- **Done When:** All tests pass.
+
+### Sub-Task 4: Final formatting & full verify
+
+- **Status:** Pending
+- **Objective:** Run `spotless:apply` and `verify` to confirm formatting, all tests pass, and JaCoCo coverage meets ≥80% threshold.
+- **Related Requirements:** R4
+- **Dependencies and Preconditions:** Sub-Tasks 1, 2, and 3 completed.
+- **In Scope for This Sub-Task:**
+  1. `./mvnw spotless:apply -pl uam -am` (auto-format all changed files).
+  2. `./mvnw verify -pl uam -am` (full pipeline: compile → test → JaCoCo → spotless check).
+- **Out of Scope for This Sub-Task:** Code changes beyond formatting.
+- **Instructions:**
+  - Run commands in order: `spotless:apply` first, then `verify`.
+  - If `verify` fails on spotless check, run `spotless:apply` again and re-verify.
+  - If `verify` fails on JaCoCo coverage, review test coverage and add missing test scenarios.
+- **Acceptance Criteria:**
+  - `./mvnw verify -pl uam -am` exits with `BUILD SUCCESS`.
+  - JaCoCo report shows ≥80% for both `com.anasdidi.uam.service.impl` and `com.anasdidi.uam.controller.impl`.
+- **Cautionary Points (Risks & Edge Cases):**
+  - `spotless:check` is bound to `verify` — must run `spotless:apply` first.
+  - JaCoCo thresholds apply only to `verify`, not `test`.
+- **Testing Suggestions:** N/A — this is the final validation step.
+- **Done When:** `BUILD SUCCESS` from `./mvnw verify -pl uam -am`.
 
 ## Final Integration & Verification
 
-- **System-Wide Test:**
-  ```bash
-  ./mvnw spotless:apply -pl uam -am && ./mvnw verify -pl uam -am
-  ```
+- **System-Wide Test:** `./mvnw verify -pl uam -am` passes with ≥80% JaCoCo coverage.
 - **Completion Checklist:**
-  - [ ] Sub-Task 1: `@JsonIgnore` added to `UserDTO.password`
-  - [ ] Sub-Task 2: `throw` → `return` in `GetUserService.orElseThrow`
-  - [ ] Sub-Task 3: `GetUserServiceTests` created with 6 test cases
-  - [ ] `spotless:apply` passes
-  - [ ] `verify` passes (all tests + JaCoCo ≥80%)
+  - [ ] `UpdateUserService` uppercases name
+  - [ ] `UpdateUserServiceTests` created with 8 test methods — all pass
+  - [ ] `UserControllerV1Tests` has 6 new `testUpdateUser_*` methods — all pass
+  - [ ] All existing tests still pass
+  - [ ] `spotless:apply` run, no formatting violations
+  - [ ] `./mvnw verify -pl uam -am` passes
 
 ## Open Questions
 
-None.
+- None.

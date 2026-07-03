@@ -10,4 +10,6 @@ public interface UserRepository
     extends JpaRepository<UserEntity, UUID>, JpaSpecificationExecutor<UserEntity> {
 
   Optional<UserEntity> findByUsername(String username);
+
+  Optional<UserEntity> findByIdAndVersion(UUID id, Integer version);
 }
