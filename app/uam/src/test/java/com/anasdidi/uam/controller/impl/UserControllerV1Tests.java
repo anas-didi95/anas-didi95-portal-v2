@@ -2,6 +2,7 @@ package com.anasdidi.uam.controller.impl;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -11,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.anasdidi.common.CommonConstants;
 import com.anasdidi.common.enums.ResponseEnum;
 import com.anasdidi.uam.UamConstants;
+import com.anasdidi.uam.dto.DeleteUserResDTO;
 import com.anasdidi.uam.dto.GetUserResDTO;
 import com.anasdidi.uam.dto.GetUserResDTO.GetUserResDTOPayload;
 import com.anasdidi.uam.dto.RegisterUserReqDTO;
@@ -19,6 +21,7 @@ import com.anasdidi.uam.dto.RegisterUserResDTO.RegisterUserResDTOPayload;
 import com.anasdidi.uam.dto.UpdateUserResDTO;
 import com.anasdidi.uam.dto.UpdateUserResDTO.UpdateUserResDTOPayload;
 import com.anasdidi.uam.dto.model.UserDTO;
+import com.anasdidi.uam.service.impl.DeleteUserService;
 import com.anasdidi.uam.service.impl.GetUserService;
 import com.anasdidi.uam.service.impl.RegisterUserService;
 import com.anasdidi.uam.service.impl.UpdateUserService;
@@ -44,6 +47,9 @@ class UserControllerV1Tests {
 
   @Mock
   private UpdateUserService updateUserService;
+
+  @Mock
+  private DeleteUserService deleteUserService;
 
   @InjectMocks
   private UserControllerV1 userControllerV1;
@@ -383,5 +389,81 @@ class UserControllerV1Tests {
             .param("version", "1")
             .contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void testDeleteUser_success() throws Exception {
+    var userId = UUID.randomUUID();
+    var mockResponse = DeleteUserResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.S02_DELETED)
+        .build();
+
+    when(deleteUserService.execute(any(com.anasdidi.uam.dto.DeleteUserReqDTO.class)))
+        .thenReturn(mockResponse);
+
+    mockMvc
+        .perform(delete(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .param("version", "1"))
+        .andExpect(status().isNoContent())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID));
+  }
+
+  @Test
+  void testDeleteUser_missingCorrelationId() throws Exception {
+    var userId = UUID.randomUUID();
+    mockMvc
+        .perform(delete(BASE_URL + "/" + userId).param("version", "1"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void testDeleteUser_missingVersion() throws Exception {
+    var userId = UUID.randomUUID();
+    mockMvc
+        .perform(
+            delete(BASE_URL + "/" + userId).header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void testDeleteUser_serviceReturnsE03() throws Exception {
+    var userId = UUID.randomUUID();
+    var mockResponse = DeleteUserResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.E03_RESOURCE_NOT_FOUND)
+        .build();
+
+    when(deleteUserService.execute(any(com.anasdidi.uam.dto.DeleteUserReqDTO.class)))
+        .thenReturn(mockResponse);
+
+    mockMvc
+        .perform(delete(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .param("version", "1"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload").doesNotExist());
+  }
+
+  @Test
+  void testDeleteUser_serviceReturnsE99() throws Exception {
+    var userId = UUID.randomUUID();
+    var mockResponse = DeleteUserResDTO.builder()
+        .correlationId(CORRELATION_ID)
+        .response(ResponseEnum.E99_UNEXPECTED_ERROR)
+        .build();
+
+    when(deleteUserService.execute(any(com.anasdidi.uam.dto.DeleteUserReqDTO.class)))
+        .thenReturn(mockResponse);
+
+    mockMvc
+        .perform(delete(BASE_URL + "/" + userId)
+            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
+            .param("version", "1"))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
+        .andExpect(jsonPath("$.payload").doesNotExist());
   }
 }

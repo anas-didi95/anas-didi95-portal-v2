@@ -4,6 +4,9 @@ import com.anasdidi.common.CommonConstants;
 import com.anasdidi.common.dto.PaginationDTO;
 import com.anasdidi.uam.UamConstants;
 import com.anasdidi.uam.controller.UserController;
+import com.anasdidi.uam.dto.DeleteUserReqDTO;
+import com.anasdidi.uam.dto.DeleteUserReqDTO.DeleteUserReqDTOPayload;
+import com.anasdidi.uam.dto.DeleteUserResDTO;
 import com.anasdidi.uam.dto.GetUserReqDTO;
 import com.anasdidi.uam.dto.GetUserReqDTO.GetUserReqDTOPayload;
 import com.anasdidi.uam.dto.GetUserResDTO;
@@ -16,6 +19,7 @@ import com.anasdidi.uam.dto.SearchUserResDTO;
 import com.anasdidi.uam.dto.UpdateUserReqDTO;
 import com.anasdidi.uam.dto.UpdateUserReqDTO.UpdateUserReqDTOPayload;
 import com.anasdidi.uam.dto.UpdateUserResDTO;
+import com.anasdidi.uam.service.impl.DeleteUserService;
 import com.anasdidi.uam.service.impl.GetUserService;
 import com.anasdidi.uam.service.impl.RegisterUserService;
 import com.anasdidi.uam.service.impl.SearchUserService;
@@ -35,6 +39,7 @@ public class UserControllerV1 implements UserController {
   private final SearchUserService searchUserService;
   private final GetUserService getUserService;
   private final UpdateUserService updateUserService;
+  private final DeleteUserService deleteUserService;
 
   @Override
   public ResponseEntity<RegisterUserResDTO> registerUser(
@@ -82,6 +87,18 @@ public class UserControllerV1 implements UserController {
         .payload(body)
         .build();
     var res = updateUserService.execute(req);
+    return ResponseEntity.status(res.getResponse().httpStatus).body(res);
+  }
+
+  @Override
+  public ResponseEntity<DeleteUserResDTO> deleteUser(
+      String correlationId, UUID userId, Integer version) {
+    var req = DeleteUserReqDTO.builder()
+        .correlationId(correlationId)
+        .payload(
+            DeleteUserReqDTOPayload.builder().userId(userId).version(version).build())
+        .build();
+    var res = deleteUserService.execute(req);
     return ResponseEntity.status(res.getResponse().httpStatus).body(res);
   }
 }

@@ -1,6 +1,7 @@
 package com.anasdidi.uam.controller;
 
 import com.anasdidi.common.CommonConstants;
+import com.anasdidi.uam.dto.DeleteUserResDTO;
 import com.anasdidi.uam.dto.GetUserResDTO;
 import com.anasdidi.uam.dto.RegisterUserReqDTO.RegisterUserReqDTOPayload;
 import com.anasdidi.uam.dto.RegisterUserResDTO;
@@ -9,6 +10,7 @@ import com.anasdidi.uam.dto.UpdateUserReqDTO.UpdateUserReqDTOPayload;
 import com.anasdidi.uam.dto.UpdateUserResDTO;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,4 +46,10 @@ public interface UserController {
       @PathVariable UUID userId,
       @RequestParam Integer version,
       @RequestBody UpdateUserReqDTOPayload body);
+
+  @DeleteMapping("/{userId}")
+  ResponseEntity<DeleteUserResDTO> deleteUser(
+      @RequestHeader(name = CommonConstants.HEADER_CORR_ID) String correlationId,
+      @PathVariable UUID userId,
+      @RequestParam Integer version);
 }
