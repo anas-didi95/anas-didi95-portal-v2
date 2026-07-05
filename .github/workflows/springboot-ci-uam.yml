@@ -19,7 +19,7 @@ env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ github.repository }}--${{ env.APP_NAME }}
+  IMAGE_NAME: ${{ github.repository }}--uam
   JAVA_VERSION: 25
   JAVA_DIST: temurin
 
