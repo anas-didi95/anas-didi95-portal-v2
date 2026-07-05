@@ -15,10 +15,11 @@ on:
     branches: ["main", "develop"]
 
 env:
+  APP_NAME: uam
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository }}--${{ env.APP_NAME }}
   IS_PUSH_IMAGE: ${{ github.event_name != 'pull_request' }}
   JAVA_VERSION: 25
   JAVA_DIST: temurin
@@ -38,14 +39,14 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: ${{ env.JAVA_DIST }}
       - name: Build with Maven Wrapper
-        run: ./mvnw clean package -pl uam -am
+        run: ./mvnw clean package -pl ${{ env.APP_NAME }} -am
       - name: Prepare artifact
         run: |
           mkdir artifact
-          cp uam/target/*.jar artifact/
+          cp ${{ env.APP_NAME }}/target/*.jar artifact/
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app
+          name: app-${{ env.APP_NAME }}
           path: app/artifact/
           retention-days: 1
