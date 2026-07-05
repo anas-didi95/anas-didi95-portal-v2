@@ -1,0 +1,4 @@
+*
+!Dockerfile.publish
+!target/
+!target/*.jar

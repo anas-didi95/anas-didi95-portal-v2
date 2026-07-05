@@ -1,0 +1,19 @@
+package com.anasdidi.common.enums;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+
+@RequiredArgsConstructor
+public enum ResponseEnum {
+  S00_SUCCESS(HttpStatus.OK, "00", "Success"),
+  S01_CREATED(HttpStatus.CREATED, "01", "Created"),
+  S02_DELETED(HttpStatus.NO_CONTENT, "02", "Deleted"),
+  E01_VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "E01", "Validation Error"),
+  E02_RESOURCE_ALREADY_EXISTS(HttpStatus.CONFLICT, "E02", "%s Already Exists"),
+  E03_RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "E03", "%s Not Found"),
+  E99_UNEXPECTED_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "E99", "Unexpected Error");
+
+  public final HttpStatus httpStatus;
+  public final String code;
+  public final String message;
+}

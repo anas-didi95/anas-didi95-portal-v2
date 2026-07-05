@@ -1,0 +1,14 @@
+---
+spring:
+  application:
+    name: "uam"
+  datasource:
+    username: "sa"
+    password: "sa"
+    url: "jdbc:h2:./h2/portal;AUTO_SERVER=TRUE"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: "validate"
+  liquibase:
+    change-log: "classpath:/db/db.changelog-master.xml"

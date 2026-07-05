@@ -1,0 +1,8 @@
+services:
+  app:
+    image: "mcr.microsoft.com/devcontainers/java:3-25-trixie"
+    command: "sleep infinity"
+    logging:
+      driver: "local"
+    volumes:
+      - "./:/home/vscode/workspace:z"
