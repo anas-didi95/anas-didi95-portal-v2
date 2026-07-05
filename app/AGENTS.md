@@ -12,3 +12,4 @@ Only `app/mvnw` is valid. The stale duplicate at `app/uam/mvnw` must not be used
 - H2 console and Actuator (both unconfigured) are included for development.
 - **JaCoCo** enforces ≥80% line coverage for `com.anasdidi.uam.controller.impl` and `com.anasdidi.uam.service.impl` during `verify`.
 - Logback writes to `app/uam/logs/uam.log` (gitignored via root `.gitignore`).
+- Prod datasource configured via env vars (`UAM_DB_USERNAME`, `UAM_DB_PASSWORD`, `UAM_DB_URL`).
