@@ -1,0 +1,4 @@
+*
+!app/uam/Dockerfile.publish
+!app/uam/target/
+!app/uam/target/*.jar

@@ -1,156 +1,226 @@
-# Plan: Fix CI/CD pipeline issues from code review
+# Plan: Implement CI workflow + Dockerfile fixes from code review
 
 ## Objective
 
-Fix 3 blocking (P0) issues and clean up dead commented-out code in the new `.github/` CI/CD files so the pipeline is safe and functional.
+Fix all actionable findings from the staged-file code review so the `springboot-ci-uam.yml` CI pipeline and `Dockerfile.publish` work correctly end-to-end. The primary goal is unblocking the `docker-publish` job (two P1 bugs), with secondary hardening for build context hygiene and maintainability (P2/P3 items).
 
 ## Requirements Snapshot
 
-- **R1 (Shell injection fix):** Replace shell-interpolated `${{ github.head_ref }}` / `${{ github.base_ref }}` in `check-pull-request.yml` with a safe `if:` condition to prevent attacker branch name injection via `pull_request_target`.
-- **R2 (Maven dependency build):** Add `-am` (also make) to the `mvnw` command in `springboot-ci-uam.yml` so the `common` dependency module is built alongside `uam`.
-- **R3 (Artifact path fix):** Correct the `cp` source path in `springboot-ci-uam.yml` from `target/uam/` (which does not exist) to `uam/target/*.jar` (the actual Maven module output).
-- **R4 (Remove dead code):** Strip the commented-out `build-web` and `docker-publish` jobs from `springboot-ci-uam.yml` to eliminate maintenance traps.
+- **R1 (Dockerfile path):** Workflow `file:` input must resolve to the actual `Dockerfile.publish` location (`app/uam/Dockerfile.publish`), not a non-existent root-level path.
+- **R2 (JAR staging):** The Docker build context must contain `app/uam/target/*.jar` so the Dockerfile's `COPY target/*.jar application.jar` resolves during `docker build`.
+- **R3 (`.dockerignore`):** Add a `.dockerignore` at the repo root to prevent sending unnecessary files to the Docker daemon.
+- **R4 (Sparse checkout):** The sparse-checkout strategy in the `docker-publish` job should be simplified for clarity and robustness.
+- **R5 (Cosign polishing):** Add explicit OIDC identity token retrieval to the cosign signing step for reliable keyless signing.
+- **R6 (Conditional logic):** Replace the `IS_PUSH_IMAGE` env var with inline `github.event_name` checks to improve readability.
+- **R7 (Use env var for module name):** All workflow file paths referencing the app module must use `${{ env.APP_NAME }}` instead of the hardcoded string `uam`, so the workflow stays generic. Exception: `.dockerignore` (interpreted by Docker, not GitHub Actions) must use the literal path.
 
 ## Scope
 
-- Edit 2 existing YAML workflow files (no new files).
-- Do not touch any Java source code, tests, or other config files.
-- Do not modify `CODEOWNERS`, `dependabot.yml`, or any other staged file.
+- Edit `.github/workflows/springboot-ci-uam.yml` to fix all findings.
+- Create `.dockerignore` at repo root.
+- No changes to `app/uam/Dockerfile.publish` (the Dockerfile itself is correct — only the CI workflow feeding it is wrong).
 
 ## Assumptions and Constraints
 
-- Working directory for Maven commands in CI is `./app`.
-- Spring Boot Maven plugin places the fat JAR in `uam/target/` (the module's own target dir).
-- The `Dockerfile.publish` and `web/` directory do not yet exist and are not planned for this feature branch.
-- Staged files are the only files to edit (already staged via `git add`).
+- The repo is small; a full checkout in the `docker-publish` job is negligible performance-wise and simpler than sparse checkout.
+- The Dockerfile's `ARG JAR_FILE=target/*.jar` will remain unchanged — staging is handled in the workflow.
+- All changes are on the current branch (`feature/user-service`), target for merge into `develop`.
+- The workflow is new (no existing CI files), so no backward-compatibility concerns.
+- **GitHub expressions do not work in `.dockerignore`** — it is parsed by Docker, not GitHub Actions. Any path in `.dockerignore` must be a literal file-system path (e.g. `app/uam/`). Hardcoding `uam` there is unavoidable.
+- **All other file paths in `.github/workflows/`** must use `${{ env.APP_NAME }}` instead of the literal `uam`. This keeps the workflow reusable if the module is ever renamed.
 
 ## Risks and Areas Requiring Care
 
-- Editing files that are already staged means they need to be re-staged after modification. Use `git add` to update the staging area.
-- The artifact path fix must match the actual Maven output — the Spring Boot repackaged JAR uses the pattern `<module>/target/<artifact>-<version>.jar`. Using `*.jar` is safe.
-- The `if:` condition syntax in `check-pull-request.yml` must use single quotes (YAML-safe) and reference `github.head_ref` / `github.base_ref` without `${{ }}`.
+- **Order of steps in `docker-publish`:** The JAR staging step must run *after* `actions/download-artifact@v4` but *before* `docker/build-push-action`.
+- **Path correctness:** The `cp` glob in the staging step must match whatever filename the Maven build produces. `*.jar` covers the standard `uam-<version>.jar` or `uam.jar`.
+- **`.dockerignore` pattern order:** Deny-first (`*`) with selective allows is correct, but the allowed paths must match the Docker build context structure.
+- **`${{ env.APP_NAME }}` everywhere:** Any remaining hardcoded `uam` in the workflow YAML that should reference `${{ env.APP_NAME }}` will silently work for the current module but break reusability. Audit all path references.
 
 ## Sub-Tasks
 
-### Sub-Task 1: Fix shell injection in check-pull-request.yml
+### Sub-Task 1: Fix Dockerfile path and add JAR staging step
 
-- **Status:** Pending
-- **Objective:** Replace the unsafe shell `if` block with a workflow-level `if:` condition that cannot be injected.
-- **Related Requirements:** R1
-- **Dependencies and Preconditions:** None
+- **Status:** Completed
+- **Objective:** Resolve both P1 issues so the `docker-publish` job can build the Docker image.
+- **Related Requirements:** R1, R2
+- **Dependencies and Preconditions:** None (straightforward edits).
 - **In Scope for This Sub-Task:**
-  - Replace the `run:` block (lines 16-19) with an `if:` condition on the step.
-  - Keep the `name` and step structure identical.
+  - Change `file: Dockerfile.publish` → `file: app/${{ env.APP_NAME }}/Dockerfile.publish` on line 94.
+  - Add a new step named `Stage artifact for Docker build` between the `actions/download-artifact@v4` step and the `Display structure of downloaded files` step (or between the display step and `Install cosign`).
+  - The staging step must create `app/${{ env.APP_NAME }}/target/` and copy the JAR from the downloaded artifact into it.
 - **Out of Scope for This Sub-Task:**
-  - Any changes to `springboot-ci-uam.yml` or other files.
+  - `.dockerignore`, sparse checkout, cosign, or `IS_PUSH_IMAGE` changes.
 - **Instructions:**
-  1. Remove lines 16-19 (the `run:` block containing shell code).
-  2. Add `if: github.head_ref != 'develop' && github.base_ref == 'main'` as a step-level property.
-  3. Replace the `run:` block with a simple `run: exit 1` and the existing echo message.
+  1. Open `.github/workflows/springboot-ci-uam.yml`.
+  2. On line 94, change `file: Dockerfile.publish` to `file: app/${{ env.APP_NAME }}/Dockerfile.publish`.
+  3. After the `Display structure of downloaded files` step (line 69-70), add:
+     ```yaml
+     - name: Stage artifact for Docker build
+       run: |
+         mkdir -p app/${{ env.APP_NAME }}/target
+         cp app-${{ env.APP_NAME }}/*.jar app/${{ env.APP_NAME }}/target/
+     ```
+  4. Ensure the indentation is consistent (2-space, same as other steps in the job).
 - **Acceptance Criteria:**
-  - The workflow step uses `if:` at the step level, never interpolating context variables into a shell string.
-  - A PR from any non-develop branch targeting `main` triggers the check and fails.
-  - A PR from `develop` to `main` passes.
-  - Any PR targeting `develop` passes regardless of source.
-- **Cautionary Points (Risks & Edge Cases):**
-  - The `if:` condition must use the unadorned `github.head_ref` / `github.base_ref` (no `${{ }}` wrap).
-  - Single quotes around `'develop'` and `'main'` are required for YAML string safety.
-- **Implementation Suggestions:**
-  ```yaml
-        - name: Check branches
-          if: github.head_ref != 'develop' && github.base_ref == 'main'
-          run: |
-            echo "Merge requests to main branch are only allowed from develop branch."
-            exit 1
-  ```
-- **Testing Suggestions:** No automated test; verify by inspecting the YAML for absence of `${{ }}` inside `run:` and correct `if:` syntax.
-- **Done When:** The file is edited, saved, `git add`-ed, and the YAML is syntactically valid.
+  - Line 94 references `app/${{ env.APP_NAME }}/Dockerfile.publish` (not hardcoded `uam`).
+  - A staging step exists that copies the JAR into `app/${{ env.APP_NAME }}/target/`.
+  - The staging step runs before `docker/build-push-action`.
+- **Cautionary Points:**
+  - The staging step's `working-directory` defaults to repo root (no `defaults.run.working-directory` set in the `docker-publish` job). This is correct since both the checkout and downloaded artifact are at the repo root.
+- **Testing Suggestions:** After applying the edit, inspect the file to confirm the changes. No runtime test possible without pushing to a branch and triggering the workflow.
+- **Done When:** Both edits are applied and verified by reading the file.
 
----
+### Sub-Task 2: Create `.dockerignore` at repo root
 
-### Sub-Task 2: Fix Maven build command (add -am flag)
-
-- **Status:** Pending
-- **Objective:** Add `-am` to the Maven command so `common` is built first in CI.
-- **Related Requirements:** R2
-- **Dependencies and Preconditions:** None
-- **In Scope for This Sub-Task:**
-  - Edit line 42 in `springboot-ci-uam.yml`: change `./mvnw clean package -pl uam` to `./mvnw clean package -pl uam -am`.
-- **Out of Scope for This Sub-Task:**
-  - Any other command or file edits.
-- **Instructions:**
-  1. Open `springboot-ci-uam.yml`.
-  2. On line 42, change `run: ./mvnw clean package -pl uam` to `run: ./mvnw clean package -pl uam -am`.
-- **Acceptance Criteria:**
-  - The command reads `./mvnw clean package -pl uam -am`.
-  - Matches the canonical form from `AGENTS.md` (`./mvnw compile -pl uam -am`).
-- **Cautionary Points (Risks & Edge Cases):**
-  - Do not add extra flags or reorder arguments.
-- **Testing Suggestions:** Run `./mvnw clean verify -pl uam -am` from `app/` to verify it passes.
-- **Done When:** Line is edited, saved, and `git add`-ed.
-
----
-
-### Sub-Task 3: Fix artifact path in prepare step
-
-- **Status:** Pending
-- **Objective:** Correct the `cp` source path to point to the actual Maven build output.
+- **Status:** Completed
+- **Objective:** Prevent unnecessary files from being sent to the Docker daemon during `docker build`.
 - **Related Requirements:** R3
-- **Dependencies and Preconditions:** Sub-Task 2 (artifact appears only after successful Maven build).
+- **Dependencies and Preconditions:** Sub-Task 1 (the `.dockerignore` paths must align with the chosen artifact staging approach).
 - **In Scope for This Sub-Task:**
-  - Edit lines 44-46 in `springboot-ci-uam.yml`: replace `cp -Rv target/uam/ artifact/` with `cp uam/target/*.jar artifact/`.
-- **Out of Scope for This Sub-Task:**
-  - Changing the `mkdir` line or the upload step.
+  - Create a `.dockerignore` file at `/home/vscode/workspace/.dockerignore`.
+  - The `.dockerignore` should deny all (`*`) then selectively allow only what the Docker build needs:
+    - `app/uam/Dockerfile.publish` (must be hardcoded — `.dockerignore` is parsed by Docker, not GitHub Actions)
+    - `app/uam/target/*.jar` (same reason)
+- **Out of Scope for This Sub-Task:** Adding `.dockerignore` to `.gitignore` (it should be tracked).
 - **Instructions:**
-  1. Open `springboot-ci-uam.yml`.
-  2. Replace `cp -Rv target/uam/ artifact/` with `cp uam/target/*.jar artifact/`.
-  3. Optional: remove the `-v` flag from `mkdir` line — not required but harmless.
+  ⚠️ **Important:** The `.dockerignore` is processed by the Docker CLI, *not* by GitHub Actions. Therefore `${{ env.APP_NAME }}` does **not** work here. Use the literal path `app/uam/`.
+  
+  Create `.dockerignore` with:
+  ```
+  *
+  !app/uam/Dockerfile.publish
+  !app/uam/target/
+  !app/uam/target/*.jar
+  ```
 - **Acceptance Criteria:**
-  - The command copies all JAR files from `uam/target/` into `artifact/`.
-  - The upload step's `path: app/artifact/` remains correct.
-- **Cautionary Points (Risks & Edge Cases):**
-  - If the Spring Boot plugin produces both a plain JAR and an executable JAR, `*.jar` captures both. That is fine.
-  - The `working-directory: ./app` makes `uam/target/` resolve correctly to `app/uam/target/`.
-- **Testing Suggestions:** After Maven build, verify `ls app/uam/target/*.jar` exists.
-- **Done When:** Lines are edited, saved, and `git add`-ed.
+  - `.dockerignore` exists at the repo root.
+  - The file contains the deny-first pattern with allows for the Dockerfile and the staged JAR directory.
+- **Cautionary Points:**
+  - Trailing `/` on `!app/uam/target/` allows the directory itself (needed for the glob to work).
+  - The `!app/uam/target/*.jar` line ensures `.jar` files inside are not denied.
+- **Testing Suggestions:** Confirm file exists with `ls -la .dockerignore`.
+- **Done When:** The `.dockerignore` file is created with the correct content.
 
----
+### Sub-Task 3: Simplify sparse checkout strategy
 
-### Sub-Task 4: Remove commented-out dead code
-
-- **Status:** Pending
-- **Objective:** Delete the `build-web` and `docker-publish` commented-out job blocks.
+- **Status:** Completed
+- **Objective:** Replace the non-cone-mode sparse checkout with a full checkout for reliability and simplicity.
 - **Related Requirements:** R4
-- **Dependencies and Preconditions:** None
+- **Dependencies and Preconditions:** Sub-Task 1 (since the Dockerfile path in the workflow will reference `app/${{ env.APP_NAME }}/Dockerfile.publish`, a full checkout is harmless).
 - **In Scope for This Sub-Task:**
-  - Remove lines 54-79 (commented `build-web` job).
-  - Remove lines 81-133 (commented `docker-publish` job).
-- **Out of Scope for This Sub-Task:**
-  - Any active code or other files.
+  - Remove the `sparse-checkout` and `sparse-checkout-cone-mode` parameters from the checkout step (lines 64-66).
+  - The step should be a plain `uses: actions/checkout@v4` with no `with:` block (or an empty `with:` block).
+- **Out of Scope for This Sub-Task:** Any other checkout optimizations.
 - **Instructions:**
-  1. Open `springboot-ci-uam.yml`.
-  2. Delete lines 54-79 inclusive (the `#build-web:` block).
-  3. Delete lines 81-133 inclusive (the `#docker-publish:` block).
-  4. The file should end cleanly after line 52 (`retention-days: 1`).
+  1. Open `.github/workflows/springboot-ci-uam.yml`.
+  2. Replace lines 63-66:
+     ```yaml
+         - name: Checkout Dockerfile
+           uses: actions/checkout@v4
+           with:
+             sparse-checkout: app/${{ env.APP_NAME }}/Dockerfile.publish
+             sparse-checkout-cone-mode: false
+     ```
+     with:
+     ```yaml
+         - name: Checkout repository
+           uses: actions/checkout@v4
+     ```
 - **Acceptance Criteria:**
-  - The file contains only the active `build-app` job.
-  - No commented-out job blocks remain.
-  - YAML is valid.
-- **Cautionary Points (Risks & Edge Cases):**
-  - Ensure blank lines between the remaining `build-app` job and end-of-file are clean.
-- **Testing Suggestions:** Validate YAML syntax: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/springboot-ci-uam.yml'))"`.
-- **Done When:** Lines deleted, saved, `git add`-ed, and YAML syntax check passes.
+  - The checkout step no longer has `sparse-checkout` or `sparse-checkout-cone-mode` keys.
+  - The step name reflects that it checks out the full repository.
+- **Cautionary Points:** A full checkout is fine for this repo's size.
+- **Testing Suggestions:** Visual inspection of the edited file.
+- **Done When:** The edit is applied and verified.
+
+### Sub-Task 4: Harden cosign signing with explicit OIDC identity token
+
+- **Status:** Completed
+- **Objective:** Make keyless signing reliable by explicitly retrieving and passing the OIDC identity token.
+- **Related Requirements:** R5
+- **Dependencies and Preconditions:** Sub-Task 1 (base workflow structure in place).
+- **In Scope for This Sub-Task:**
+  - Add a step to request the OIDC JWT token before the signing step.
+  - Modify the `cosign sign` command to pass `--identity-token`.
+- **Out of Scope for This Sub-Task:** Switching to the `cosign-action` GitHub Action.
+- **Instructions:**
+  1. Open `.github/workflows/springboot-ci-uam.yml`.
+  2. Before the `Sign the published Docker image` step (before line 100), add:
+     ```yaml
+         - name: Retrieve OIDC token
+           id: auth
+           uses: actions/github-script@v7
+           with:
+             retries: 2
+             script: |
+               const token = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+               const repoPath = process.env.GITHUB_REPOSITORY_OWNER + '/' + process.env.GITHUB_REPOSITORY;
+               const res = await fetch(
+                 `${process.env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sigstore`
+               );
+               const data = await res.json();
+               core.setOutput('oidc', data.value);
+     ```
+  3. On line 105, change the `cosign sign` command to:
+     ```yaml
+         run: echo "${TAGS}" | xargs -I {} cosign sign --yes --identity-token ${{ steps.auth.outputs.oidc }} {}@${DIGEST}
+     ```
+- **Acceptance Criteria:**
+  - A `Retrieve OIDC token` step exists before the signing step.
+  - The `cosign sign` command includes `--identity-token ${{ steps.auth.outputs.oidc }}`.
+- **Cautionary Points:**
+  - The `id-token: write` permission is already declared (line 60), so OIDC token retrieval will work.
+  - The `actions/github-script@v7` uses Node's native `fetch` (available in Node 20+ which is the default runner).
+- **Testing Suggestions:** Visual inspection of the edited file.
+- **Done When:** Both edits are applied and verified.
+
+### Sub-Task 5: Simplify `IS_PUSH_IMAGE` logic by using inline conditions
+
+- **Status:** Completed
+- **Objective:** Remove the `IS_PUSH_IMAGE` env var and use `github.event_name` directly for clarity.
+- **Related Requirements:** R6
+- **Dependencies and Preconditions:** Sub-Task 1 (base workflow structure in place).
+- **In Scope for This Sub-Task:**
+  - Remove the `IS_PUSH_IMAGE` line from the `env:` block (line 23).
+  - Replace `if: env.IS_PUSH_IMAGE == 'true'` → `if: github.event_name != 'pull_request'` on lines 78 and 101.
+  - Replace `push: ${{ env.IS_PUSH_IMAGE == 'true' }}` → `push: ${{ github.event_name != 'pull_request' }}` on line 95.
+- **Out of Scope for This Sub-Task:** Any other env var changes.
+- **Instructions:**
+  1. Delete line 23: `IS_PUSH_IMAGE: ${{ github.event_name != 'pull_request' }}`.
+  2. On line 78, change: `if: env.IS_PUSH_IMAGE == 'true'` → `if: github.event_name != 'pull_request'`.
+  3. On line 95, change: `push: ${{ env.IS_PUSH_IMAGE == 'true' }}` → `push: ${{ github.event_name != 'pull_request' }}`.
+  4. On line 101, change: `if: env.IS_PUSH_IMAGE == 'true'` → `if: github.event_name != 'pull_request'`.
+- **Acceptance Criteria:**
+  - The `IS_PUSH_IMAGE` env var is removed from the `env:` block.
+  - All three usages of `env.IS_PUSH_IMAGE` are replaced with `github.event_name != 'pull_request'`.
+  - The logic is identical: push and dispatch runs push images; PR runs do not.
+- **Cautionary Points:**
+  - Line 95 is inside a `with:` block, so the expression uses `${{ }}` syntax (it already did). The replacement is straightforward.
+  - Lines 78 and 101 are `if:` conditions at the step level, not inside `${{ }}`.
+- **Testing Suggestions:** Visual inspection of the edited file.
+- **Done When:** All four edits are applied and verified.
 
 ## Final Integration & Verification
 
-- **Verification Steps:**
-  1. Confirm all 4 files are properly staged: `git diff --staged --stat` shows the updated `.github/workflows/check-pull-request.yml` and `springboot-ci-uam.yml`.
-  2. Validate YAML syntax on both workflow files.
-  3. Run `./mvnw clean verify -pl uam -am` from `app/` to confirm the Maven build works end-to-end.
-  4. Review final `git diff --staged` to confirm no unintended changes.
+- **File Integrity Check:** Read the final `.github/workflows/springboot-ci-uam.yml` and confirm:
+  - The env block no longer contains `IS_PUSH_IMAGE`.
+  - The checkout step is a simple `actions/checkout@v4`.
+  - A staging step copies the JAR into `app/${{ env.APP_NAME }}/target/` (uses env var, not hardcoded `uam`).
+  - The Docker build `file:` points to `app/${{ env.APP_NAME }}/Dockerfile.publish` (uses env var).
+  - The cosign step has OIDC token retrieval before it.
+- **Workflow Path Audit:** Search the entire workflow file for any remaining instance of the literal `uam` in a path. If one is found that should reference `${{ env.APP_NAME }}`, fix it. The only acceptable literal `uam` in the workflow is in the workflow name (`Spring Boot CI with Maven - UAM`) and the `APP_NAME: uam` env var definition itself.
+- **New File Check:** Confirm `.dockerignore` exists at the repo root.
+- **Format Check:** Run `./mvnw spotless:apply` from `app/` (unlikely to affect YAML, but good practice).
+- **Git Status:** Verify only the intended files are staged:
+  - `.github/workflows/springboot-ci-uam.yml` (modified)
+  - `.dockerignore` (new)
 - **Completion Checklist:**
-  - [ ] `check-pull-request.yml` uses `if:` condition, no shell injection vector.
-  - [ ] `springboot-ci-uam.yml` Maven command includes `-am`.
-  - [ ] `springboot-ci-uam.yml` artifact path uses `uam/target/*.jar`.
-  - [ ] `springboot-ci-uam.yml` has no commented-out jobs.
-  - [ ] All changes staged and ready for commit.
+  - [x] Sub-Task 1: Dockerfile path + JAR staging step
+  - [x] Sub-Task 2: `.dockerignore` created
+  - [x] Sub-Task 3: Sparse checkout simplified
+  - [x] Sub-Task 4: Cosign OIDC token hardening
+  - [x] Sub-Task 5: Inline event conditions instead of `IS_PUSH_IMAGE`
+
+## Open Questions
+
+- None. All findings from the review have concrete fixes with clear guidance.

@@ -1,76 +1,74 @@
 # Code Review Summary
 
-**Scope**: CI/CD infrastructure (4 new files under `.github/`)
-**Branch**: `feature/user-service`
-**Overall risk**: Medium
+**Scope**: CI workflow (`.github/workflows/springboot-ci-uam.yml`) + Dockerfile (`app/uam/Dockerfile.publish`)
+**Overall risk**: High
 **Verdict**: Request changes
-
----
 
 ## Findings
 
-### [P0] Blocking
+### [P1] High
 
-#### Shell injection vulnerability in PR branch check
-- **Location**: `.github/workflows/check-pull-request.yml:48-52`
-- **Why it matters**: `pull_request_target` runs with full repo write permissions in the base repo's context. Unsanitized `${{ github.head_ref }}` / `${{ github.base_ref }}` expressions in a shell script allow an attacker to inject arbitrary commands via a crafted branch name (e.g., a branch named `develop" ] && curl ... #`), bypassing the gate or exfiltrating secrets.
-- **Evidence**: The `run:` block interpolates `${{ github.head_ref }}` and `${{ github.base_ref }}` directly into a shell `if` statement. GitHub Actions expands these before the shell evaluates them, and `pull_request_target` runs in the context of the target repo, giving write access to `GITHUB_TOKEN`.
-- **Fix**: Replace the shell script with a workflow-level `if:` condition that uses the structured `github` context (never interpolated into a shell):
-  
-  ```yaml
-  - name: Check branches
-    if: github.head_ref != 'develop' && github.base_ref == 'main'
-    run: |
-      echo "Merge requests to main branch are only allowed from develop branch."
-      exit 1
-  ```
+- **Dockerfile path mismatch in workflow**
+  - **Location**: `.github/workflows/springboot-ci-uam.yml:94`
+  - **Why it matters**: The `docker-publish` job will fail with a `COPY failed` / file-not-found error every time it runs.
+  - **Evidence**: Line 94 specifies `file: Dockerfile.publish`, but the sparse checkout (line 65) checks the file into `app/uam/Dockerfile.publish`. With `context: .` (repo root), Docker looks for `./Dockerfile.publish` — which does not exist. The correct relative path from context root is `app/uam/Dockerfile.publish`.
+  - **Fix**: Change `file: Dockerfile.publish` to `file: app/uam/Dockerfile.publish` on line 94.
 
-#### Maven build will fail in CI — missing dependency module
-- **Location**: `.github/workflows/springboot-ci-uam.yml:101`
-- **Why it matters**: The `uam` module depends on `common`, which is a sibling Maven module. In a fresh CI checkout, `common` has never been installed into the local Maven repo. Building `-pl uam` without `-am` (also make) will fail with a dependency resolution error.
-- **Evidence**: `AGENTS.md` shows the canonical compile command is `./mvnw compile -pl uam -am` and the test command is `./mvnw test -pl uam -am` — both use `-am`. The CI command `./mvnw clean package -pl uam` omits `-am`.
-- **Fix**: Change line 101 to:
-  
-  ```yaml
-  run: ./mvnw clean package -pl uam -am
-  ```
-
-#### Artifact path does not exist — `target/uam/` is not a Maven build output
-- **Location**: `.github/workflows/springboot-ci-uam.yml:103-105`
-- **Why it matters**: After building the `uam` module, the build output goes to `app/uam/target/` (the module's target directory), not `app/target/uam/`. The `cp -Rv target/uam/ artifact/` command will fail because the source directory does not exist, breaking the entire pipeline.
-- **Evidence**: Maven multi-module builds place each module's output in `<module-dir>/target/`. Spring Boot fat JARs land at `uam/target/uam-<version>.jar` or `uam/target/*.jar`. The directory `target/uam/` is never created by a standard Maven build.
-- **Fix**: Either:
-  - Copy the JAR directly: `cp uam/target/*.jar artifact/`, or
-  - Adjust the path to match the actual module output structure, e.g.:
-    
-    ```yaml
-    - name: Prepare artifact
-      run: |
-        mkdir artifact
-        cp uam/target/*.jar artifact/
-    ```
+- **Docker build cannot find the JAR artifact**
+  - **Location**: `app/uam/Dockerfile.publish:7,10` + workflow `docker-publish` job (lines 62–99)
+  - **Why it matters**: The Docker build expects the JAR at `target/*.jar` relative to the build context, but the CI workflow never places it there — the artifact is downloaded into an `app-uam/` directory instead.
+  - **Evidence**:
+    - `build-app` (line 46): `cp uam/target/*.jar artifact/` → JAR is inside `artifact/`, then uploaded with name `app-uam` (line 50).
+    - `docker-publish` (line 69): `actions/download-artifact@v4` restores the artifact into a directory `./app-uam/` at the workspace root.
+    - Dockerfile line 7: `ARG JAR_FILE=target/*.jar` — no `target/` directory exists in the Docker build context, so `COPY` silently matches nothing (or fails with a glob-no-match error in newer Docker versions).
+  - **Fix options** (choose one):
+    1. **(Recommended)** In the `docker-publish` job, before the Docker build step, restructure the downloaded artifact so the JAR is at `target/*.jar`:
+       ```yaml
+       - name: Stage artifact for Docker build
+         run: |
+           mkdir -p app/${{ env.APP_NAME }}/target
+           cp app-${{ env.APP_NAME }}/*.jar app/${{ env.APP_NAME }}/target/
+       ```
+       Then set `context: .` remains fine, `file: app/uam/Dockerfile.publish`, and the Dockerfile's `target/*.jar` glob resolves.
+    2. **Alternatively**, change the Dockerfile to accept the JAR path as a build arg and pass it from the workflow. This adds complexity with less benefit.
 
 ### [P2] Medium
 
-#### Commented-out build-web job references non-existent `web/` directory
-- **Location**: `.github/workflows/springboot-ci-uam.yml:113-138`
-- **Why it matters**: If uncommented without updating the path, this job would fail on `working-directory: ./web` since `web/` does not exist in the repository. Not blocking (fully commented out), but creates a maintenance trap.
-- **Evidence**: No `web/` directory exists at the repo root.
-- **Fix**: Remove the commented-out job entirely, or update it to reflect future intent (e.g., adjust paths or add a TODO with more context).
+- **No `.dockerignore` file**
+  - **Location**: repo root (missing file)
+  - **Why it matters**: The Docker build context sent to the daemon could be large, slowing builds and increasing layer-cache pressure.
+  - **Evidence**: `docker/build-push-action` at line 91 uses `context: .`. Without a `.dockerignore`, the entire checkout (git history, node modules if any, other modules) is sent. Currently mitigated by sparse checkout, but this is a fragile coupling — any change to checkout strategy could silently bloat context.
+  - **Fix**: Create a `.dockerignore` at the repo root:
+    ```
+    *
+    !app/uam/Dockerfile.publish
+    !app/uam/target/
+    ```
+    (Adjust paths based on the chosen fix for the artifact staging issue above.)
 
-#### Commented-out Docker publish references missing `Dockerfile.publish`
-- **Location**: `.github/workflows/springboot-ci-uam.yml:140-192`
-- **Why it matters**: Same pattern as above — `Dockerfile.publish` and sparse checkout will fail when uncommented.
-- **Evidence**: No `Dockerfile.publish` exists at the repo root.
-- **Fix**: Either create the Dockerfile before uncommenting, or remove the commented block.
+- **Sparse checkout with cone-mode disabled is brittle**
+  - **Location**: `.github/workflows/springboot-ci-uam.yml:65-66`
+  - **Why it matters**: `sparse-checkout-cone-mode: false` with a single file path works but is not the standard or well-documented pattern. Future maintainers may misinterpret it.
+  - **Evidence**: The standard `sparse-checkout` usage in `actions/checkout@v4` recommends cone mode (default). Disabling it to check out a single file is unusual and fragile across action versions.
+  - **Fix**: Either omit sparse checkout entirely (a full checkout is negligible for this size repo) or use a standard cone-mode sparse checkout with a broader pattern.
 
----
+### [P3] Low
+
+- **Cosign signing step lacks explicit identity flag**
+  - **Location**: `.github/workflows/springboot-ci-uam.yml:105`
+  - **Why it matters**: Keyless signing relies on ambient OIDC token detection, which can silently fall back to interactive mode or fail in some runner environments.
+  - **Evidence**: The `cosign sign` command (line 105) has no `--identity-token` or `--oidc-provider` flag.
+  - **Fix**: Add `--identity-token ${{ steps.auth.outputs.oidc }}` after retrieving the token, or use the `cosign-action` in keyless mode which handles this automatically.
+
+- **`IS_PUSH_IMAGE` env var uses GitHub expression in env block**
+  - **Location**: `.github/workflows/springboot-ci-uam.yml:23`
+  - **Why it matters**: Setting an env var to a boolean expression is fragile — GitHub Actions evaluates it as a string (`'true'` / `'false'`). The downstream `if: env.IS_PUSH_IMAGE == 'true'` works today but is less idiomatic than a direct `if: github.event_name != 'pull_request'`.
+  - **Evidence**: Line 23 defines `IS_PUSH_IMAGE: ${{ github.event_name != 'pull_request' }}`. Lines 78 and 95 compare `env.IS_PUSH_IMAGE == 'true'`. This works but is harder to debug and unnecessary.
+  - **Fix**: Replace the env var and use `if: github.event_name != 'pull_request'` directly on lines 78 and 95.
 
 ## Suggested Next Steps
 
-- [ ] **Fix P0 findings** before merging:
-  - Protect the branch check shell script from injection (use `if:` condition).
-  - Add `-am` flag to the Maven build command.
-  - Fix the artifact path to point to the actual build output.
-- [ ] Remove commented-out job blocks that reference non-existent resources, or create the required files first.
-- [ ] Re-run the full pipeline locally (`./mvnw clean verify -pl uam -am`) before merge to confirm the Maven fix works.
+- [x] Fix P1 findings (Dockerfile path + JAR staging) before merge
+- [ ] Add a `.dockerignore` to keep Docker builds lean
+- [ ] Consider simplifying sparse checkout strategy
+- [ ] Re-test the full pipeline end-to-end after fixes (simulate with `workflow_dispatch` on a branch)
