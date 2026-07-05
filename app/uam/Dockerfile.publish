@@ -7,6 +7,7 @@ WORKDIR /builder
 ARG JAR_FILE=target/*.jar
 
 # Copy the jar file to the working directory and rename it to application.jar
+RUN ls -la
 COPY ${JAR_FILE} application.jar
 
 # Extract the jar file using an efficient layout
