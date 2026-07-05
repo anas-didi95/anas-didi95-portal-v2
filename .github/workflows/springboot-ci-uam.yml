@@ -98,22 +98,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Retrieve OIDC token
-        id: auth
-        uses: actions/github-script@v7
-        with:
-          retries: 2
-          script: |
-            const token = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-            const repoPath = process.env.GITHUB_REPOSITORY_OWNER + '/' + process.env.GITHUB_REPOSITORY;
-            const res = await fetch(
-              `${process.env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sigstore`
-            );
-            const data = await res.json();
-            core.setOutput('oidc', data.value);
       - name: Sign the published Docker image
         if: github.event_name != 'pull_request'
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
-        run: echo "${TAGS}" | xargs -I {} cosign sign --yes --identity-token ${{ steps.auth.outputs.oidc }} {}@${DIGEST}
+        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
