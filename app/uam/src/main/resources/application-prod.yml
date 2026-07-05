@@ -1,0 +1,6 @@
+---
+spring:
+  datasource:
+    username: "${UAM_DB_USERNAME}"
+    password: "${UAM_DB_PASSWORD}"
+    url: "${UAM_DB_URL}"
