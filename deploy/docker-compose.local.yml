@@ -1,0 +1,36 @@
+services:
+  traefik-docker:
+    image: "traefik:v3.7.6"
+    labels:
+      - "traefik.http.routers.dashboard.rule=Host(`localhost`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=anas.local:$$2y$$05$$clNT6RyDPVdeEK8m7N/1xeuVQwAC1ZwD5kPKrFlRROH.D05wdMhdu"
+    command:
+      - "--entryPoints.web.address=:80"
+      #- "--entryPoints.websecure.address=:443"
+      - "--api.dashboard=true"
+      - "--log.level=DEBUG"
+      - "--providers.docker"
+    logging:
+      driver: "local"
+    networks:
+      - "anas-didi95-network"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  whoami:
+    image: "traefik/whoami"
+    labels:
+      - "traefik.http.routers.whoami.rule=Host(`localhost`) && PathPrefix(`/whoami`)"
+    logging:
+      driver: "local"
+    networks:
+      - "anas-didi95-network"
+
+networks:
+  anas-didi95-network:
+    external: true
