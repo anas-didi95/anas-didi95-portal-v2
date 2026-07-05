@@ -1,232 +1,156 @@
-# Plan: Add Missing Tests & Minor Fixes for Delete User Feature
+# Plan: Fix CI/CD pipeline issues from code review
 
 ## Objective
 
-Add integration and controller tests for the staged Delete User feature, along with minor consistency fixes, to ensure the full pipeline (`verify`) passes with ≥80% JaCoCo coverage.
+Fix 3 blocking (P0) issues and clean up dead commented-out code in the new `.github/` CI/CD files so the pipeline is safe and functional.
 
 ## Requirements Snapshot
 
-- **R1 (Delete Service — Integration Tests):** Using `@SpringBootTest` with in-memory H2, cover success (soft-delete sets `isDeleted=true`), not-found (E03), version-mismatch (E03), and validation error (E01) scenarios for `DeleteUserService`.
-- **R2 (Delete Controller — Web MVC Tests):** Using `MockMvcBuilders.standaloneSetup()` with mocked `DeleteUserService`, cover success (204 No Content), missing correlationId (400), missing version param (400), E03 → 404, E99 → 500.
-- **R3 (Consistency):** Add `@Slf4j` to `DeleteUserService` to match the pattern of all other services (`UpdateUserService`, `RegisterUserService`, `GetUserService`, `SearchUserService`).
-- **R4 (Coverage):** JaCoCo 80% line coverage for `com.anasdidi.uam.service.impl` and `com.anasdidi.uam.controller.impl` must be maintained / met.
+- **R1 (Shell injection fix):** Replace shell-interpolated `${{ github.head_ref }}` / `${{ github.base_ref }}` in `check-pull-request.yml` with a safe `if:` condition to prevent attacker branch name injection via `pull_request_target`.
+- **R2 (Maven dependency build):** Add `-am` (also make) to the `mvnw` command in `springboot-ci-uam.yml` so the `common` dependency module is built alongside `uam`.
+- **R3 (Artifact path fix):** Correct the `cp` source path in `springboot-ci-uam.yml` from `target/uam/` (which does not exist) to `uam/target/*.jar` (the actual Maven module output).
+- **R4 (Remove dead code):** Strip the commented-out `build-web` and `docker-publish` jobs from `springboot-ci-uam.yml` to eliminate maintenance traps.
 
 ## Scope
 
-- Create `DeleteUserServiceTests.java` — ~5 test methods covering success, not-found, version-mismatch, null-payload, and missing-correlationId.
-- Add `deleteUser` test methods to existing `UserControllerV1Tests.java` — ~5 test methods.
-- Add `@Slf4j` annotation to `DeleteUserService`.
-- Run `spotless:apply` and `verify` to confirm formatting and coverage.
+- Edit 2 existing YAML workflow files (no new files).
+- Do not touch any Java source code, tests, or other config files.
+- Do not modify `CODEOWNERS`, `dependabot.yml`, or any other staged file.
 
 ## Assumptions and Constraints
 
-- All commands run from `app/` using the canonical `./mvnw`.
-- Existing tests for RegisterUser, GetUser, SearchUser, UpdateUser pass and must not be broken.
-- `UserControllerV1Tests` already uses `@ExtendWith(MockitoExtension.class)` with `MockMvcBuilders.standaloneSetup()` — new tests follow the same pattern.
-- `DeleteUserReqDTO` payload has `@NotNull UUID userId`, `@NotNull Integer version`.
-- `DeleteUserService` returns `S02_DELETED` (HTTP 204 No Content) with no payload on success.
-- JaCoCo runs during `verify` only; `test` alone does not enforce coverage.
-- The `UserRepository.findByIdAndVersion(UUID, Integer)` method already exists.
-- `DeleteUserResDTO` has no payload field — response body on success will only have base fields (correlationId, traceId, timestamp, timeTaken, responseCode, responseDesc).
+- Working directory for Maven commands in CI is `./app`.
+- Spring Boot Maven plugin places the fat JAR in `uam/target/` (the module's own target dir).
+- The `Dockerfile.publish` and `web/` directory do not yet exist and are not planned for this feature branch.
+- Staged files are the only files to edit (already staged via `git add`).
 
 ## Risks and Areas Requiring Care
 
-- `S02_DELETED.httpStatus` is `HttpStatus.NO_CONTENT` (204) — controller test must assert `isNoContent()` not `isOk()`.
-- HTTP 204 No Content typically omits a response body — but the controller calls `ResponseEntity.status(res.getResponse().httpStatus).body(res)` which will still serialize the DTO. The test should verify the JSON structure is present despite the 204 status. This is an intentional pattern consistency choice in this codebase.
-- `findByIdAndVersion` returns `Optional.empty()` for both non-existent id AND wrong version — both map to `E03_RESOURCE_NOT_FOUND` with the same error map.
-- `DeleteUserReqDTO` is a nested-payload DTO — service test must build it correctly with `.payload(DeleteUserReqDTOPayload.builder()...)`.
-- The `DeleteMapping` uses `@RequestParam Integer version` (query param) — controller tests must pass it correctly via `.param("version", "1")`.
-- The mock for `deleteUser` controller tests needs `any(DeleteUserReqDTO.class)` — use fully qualified or imported type.
+- Editing files that are already staged means they need to be re-staged after modification. Use `git add` to update the staging area.
+- The artifact path fix must match the actual Maven output — the Spring Boot repackaged JAR uses the pattern `<module>/target/<artifact>-<version>.jar`. Using `*.jar` is safe.
+- The `if:` condition syntax in `check-pull-request.yml` must use single quotes (YAML-safe) and reference `github.head_ref` / `github.base_ref` without `${{ }}`.
 
 ## Sub-Tasks
 
-### Sub-Task 1: Add `@Slf4j` to DeleteUserService
+### Sub-Task 1: Fix shell injection in check-pull-request.yml
 
 - **Status:** Pending
-- **Objective:** Add `@Slf4j` Lombok annotation to `DeleteUserService` for consistency with all other services.
-- **Related Requirements:** R3
+- **Objective:** Replace the unsafe shell `if` block with a workflow-level `if:` condition that cannot be injected.
+- **Related Requirements:** R1
 - **Dependencies and Preconditions:** None
 - **In Scope for This Sub-Task:**
-  - Add `import lombok.extern.slf4j.Slf4j;` to `DeleteUserService.java`.
-  - Add `@Slf4j` annotation to the class.
-- **Out of Scope for This Sub-Task:** Any behavioral changes or test additions.
+  - Replace the `run:` block (lines 16-19) with an `if:` condition on the step.
+  - Keep the `name` and step structure identical.
+- **Out of Scope for This Sub-Task:**
+  - Any changes to `springboot-ci-uam.yml` or other files.
 - **Instructions:**
-  1. Read `DeleteUserService.java`.
-  2. Add `import lombok.extern.slf4j.Slf4j;` to imports.
-  3. Add `@Slf4j` annotation above the `@Service` line.
-  4. Run `./mvnw spotless:apply -pl uam -am` to format.
+  1. Remove lines 16-19 (the `run:` block containing shell code).
+  2. Add `if: github.head_ref != 'develop' && github.base_ref == 'main'` as a step-level property.
+  3. Replace the `run:` block with a simple `run: exit 1` and the existing echo message.
 - **Acceptance Criteria:**
-  - `DeleteUserService` has `@Slf4j` annotation.
-  - Compilation passes.
-- **Cautionary Points (Risks & Edge Cases):** None — pure annotation addition.
-- **Implementation Suggestions:** Place `@Slf4j` on its own line before `@Service`.
-- **Testing Suggestions:** Run `./mvnw compile -pl uam -am` to confirm compilation.
-- **Done When:** Change is applied and `./mvnw compile -pl uam -am` passes.
-
-### Sub-Task 2: Create DeleteUserServiceTests
-
-- **Status:** Pending
-- **Objective:** Create integration tests for `DeleteUserService` covering success, not-found, version-mismatch, and validation error scenarios.
-- **Related Requirements:** R1, R4
-- **Dependencies and Preconditions:** Sub-Task 1 is not required for test correctness but can be done in any order.
-- **In Scope for This Sub-Task:**
-  - Create `src/test/java/com/anasdidi/uam/service/impl/DeleteUserServiceTests.java`.
-  - Test methods:
-    1. `testDeleteUser_success` — seed user, delete, assert `S02_DELETED` + `"02"` + `"Deleted"`, assert entity `isDeleted=true` in DB.
-    2. `testDeleteUser_notFound` — use non-existent UUID, assert `E03_RESOURCE_NOT_FOUND`, null payload.
-    3. `testDeleteUser_versionMismatch` — seed user, call with wrong version, assert `E03_RESOURCE_NOT_FOUND`.
-    4. `testDeleteUser_nullPayload` — use `ObjenesisStd` to set `payload = null`, assert `E01_VALIDATION_ERROR`.
-    5. `testDeleteUser_missingCorrelationId` — empty correlationId, assert `E01_VALIDATION_ERROR`.
-- **Out of Scope for This Sub-Task:** Controller tests, `@Slf4j` fix.
-- **Instructions:**
-  - Follow the pattern in `UpdateUserServiceTests.java`:
-    - `@SpringBootTest` on the class.
-    - `@Transactional` on each test method.
-    - `@Autowired DeleteUserService`, `@Autowired UserRepository`.
-    - Use `ObjenesisStd` + `ReflectionTestUtils` for null-payload tests.
-  - For the success test, verify:
-    - `ResponseEnum.S02_DELETED`, `"02"`, `"Deleted"`.
-    - `getPayload()` is null (no payload in `DeleteUserResDTO`).
-    - Fetch entity from DB and assert `.getIsDeleted()` is `true`.
-  - Use a `seedUser(String username, String name)` helper method (same pattern as `UpdateUserServiceTests`).
-  - For the null-payload test:
-    ```java
-    var objenesis = new ObjenesisStd();
-    var req = objenesis.newInstance(DeleteUserReqDTO.class);
-    ReflectionTestUtils.setField(req, "correlationId", "corr-null");
-    ReflectionTestUtils.setField(req, "payload", null);
-    ```
-  - For the missing-correlationId test, use `.correlationId("")` in the builder.
-- **Acceptance Criteria:**
-  - All 5 tests pass with `./mvnw test -pl uam -am -Dtest=DeleteUserServiceTests`.
+  - The workflow step uses `if:` at the step level, never interpolating context variables into a shell string.
+  - A PR from any non-develop branch targeting `main` triggers the check and fails.
+  - A PR from `develop` to `main` passes.
+  - Any PR targeting `develop` passes regardless of source.
 - **Cautionary Points (Risks & Edge Cases):**
-  - `DeleteUserReqDTO` builder path: `DeleteUserReqDTO.builder().correlationId("...").payload(DeleteUserReqDTOPayload.builder().userId(...).version(...).build()).build()`.
-  - `DeleteUserResDTO` has no payload field — `getPayload()` always returns null, even on success. Do not assert payload in success case.
-  - `@NotNull` on `userId` and `version` in payload — the null-payload test bypasses this via Objenesis.
+  - The `if:` condition must use the unadorned `github.head_ref` / `github.base_ref` (no `${{ }}` wrap).
+  - Single quotes around `'develop'` and `'main'` are required for YAML string safety.
 - **Implementation Suggestions:**
-  - Helper method for seeding:
-    ```java
-    private UserEntity seedUser(String username, String name) {
-      return userRepository.save(UserEntity.builder()
-          .username(username)
-          .password("pass")
-          .name(name)
-          .isDeleted(false)
-          .build());
-    }
-    ```
-- **Testing Suggestions:** Run `./mvnw test -pl uam -am -Dtest=DeleteUserServiceTests`.
-- **Done When:** All 5 tests pass and `spotless:apply` has been run.
+  ```yaml
+        - name: Check branches
+          if: github.head_ref != 'develop' && github.base_ref == 'main'
+          run: |
+            echo "Merge requests to main branch are only allowed from develop branch."
+            exit 1
+  ```
+- **Testing Suggestions:** No automated test; verify by inspecting the YAML for absence of `${{ }}` inside `run:` and correct `if:` syntax.
+- **Done When:** The file is edited, saved, `git add`-ed, and the YAML is syntactically valid.
 
-### Sub-Task 3: Add deleteUser controller tests to UserControllerV1Tests
+---
+
+### Sub-Task 2: Fix Maven build command (add -am flag)
 
 - **Status:** Pending
-- **Objective:** Add Web MVC controller tests for the `DELETE /uam/v1/user/{userId}?version=` endpoint covering success, error, and validation scenarios.
-- **Related Requirements:** R2, R4
-- **Dependencies and Preconditions:** None. Can be done in parallel with Sub-Task 2.
+- **Objective:** Add `-am` to the Maven command so `common` is built first in CI.
+- **Related Requirements:** R2
+- **Dependencies and Preconditions:** None
 - **In Scope for This Sub-Task:**
-  - Add to existing `UserControllerV1Tests.java`:
-    1. Mock field: `@Mock private DeleteUserService deleteUserService;`
-    2. Add import for `import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;`
-    3. Add import for `import com.anasdidi.uam.dto.DeleteUserResDTO;` (for mock response builder)
-    4. Add import for `import com.anasdidi.uam.service.impl.DeleteUserService;`
-    5. Test methods:
-       - `testDeleteUser_success` — mock `S02_DELETED`, assert 204 No Content + jsonPath for base fields.
-       - `testDeleteUser_missingCorrelationId` — no header, assert 400 Bad Request.
-       - `testDeleteUser_missingVersion` — no `version` param, assert 400 Bad Request (Spring rejects before controller).
-       - `testDeleteUser_serviceReturnsE03` — mock `E03_RESOURCE_NOT_FOUND`, assert 404 + null payload.
-       - `testDeleteUser_serviceReturnsE99` — mock `E99_UNEXPECTED_ERROR`, assert 500.
-- **Out of Scope for This Sub-Task:** Service tests (Sub-Task 2), `@Slf4j` fix.
+  - Edit line 42 in `springboot-ci-uam.yml`: change `./mvnw clean package -pl uam` to `./mvnw clean package -pl uam -am`.
+- **Out of Scope for This Sub-Task:**
+  - Any other command or file edits.
 - **Instructions:**
-  - Follow the pattern in existing test methods within the same file:
-    - `@Mock private DeleteUserService deleteUserService;` field alongside other mocks.
-    - Inject via `@InjectMocks` (already present — `UserControllerV1` constructor takes all services).
-    - Use `MockMvcRequestBuilders.delete(...)` for the DELETE call.
-    - URL: `BASE_URL + "/{userId}"` with `.param("version", "1")` for the query param.
-    - Header: `.header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)`.
-  - For the success test:
-    ```java
-    var userId = UUID.randomUUID();
-    var mockResponse = DeleteUserResDTO.builder()
-        .correlationId(CORRELATION_ID)
-        .response(ResponseEnum.S02_DELETED)
-        .build();
-    when(deleteUserService.execute(any(DeleteUserReqDTO.class))).thenReturn(mockResponse);
-    mockMvc
-        .perform(delete(BASE_URL + "/" + userId)
-            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
-            .param("version", "1"))
-        .andExpect(status().isNoContent())
-        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID));
-    ```
-  - For the E03 test:
-    ```java
-    var mockResponse = DeleteUserResDTO.builder()
-        .correlationId(CORRELATION_ID)
-        .response(ResponseEnum.E03_RESOURCE_NOT_FOUND)
-        .build();
-    when(deleteUserService.execute(any(DeleteUserReqDTO.class))).thenReturn(mockResponse);
-    mockMvc
-        .perform(delete(BASE_URL + "/" + userId)
-            .header(CommonConstants.HEADER_CORR_ID, CORRELATION_ID)
-            .param("version", "1"))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID))
-        .andExpect(jsonPath("$.payload").doesNotExist());
-    ```
+  1. Open `springboot-ci-uam.yml`.
+  2. On line 42, change `run: ./mvnw clean package -pl uam` to `run: ./mvnw clean package -pl uam -am`.
 - **Acceptance Criteria:**
-  - All 5 new controller tests pass alongside all existing tests.
+  - The command reads `./mvnw clean package -pl uam -am`.
+  - Matches the canonical form from `AGENTS.md` (`./mvnw compile -pl uam -am`).
 - **Cautionary Points (Risks & Edge Cases):**
-  - `@RequestParam Integer version` defaults to `required=true` so missing param → 400 from Spring before controller is invoked.
-  - `ResponseEntity.status(HttpStatus.NO_CONTENT).body(res)` still serializes the body despite 204. The test should verify body content exists — this is the codebase's chosen behavior.
-  - `MockMvcRequestBuilders.delete(...)` needs `import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;`.
-- **Implementation Suggestions:**
-  - Add these imports at the top of the file:
-    ```java
-    import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-    import com.anasdidi.uam.dto.DeleteUserResDTO;
-    import com.anasdidi.uam.service.impl.DeleteUserService;
-    ```
-  - Use `UUID.randomUUID()` for userId in all test methods.
-- **Testing Suggestions:**
-  - Run `./mvnw test -pl uam -am -Dtest=UserControllerV1Tests` to verify new controller tests.
-  - Then run the full set: `./mvnw test -pl uam -am -Dtest=UserControllerV1Tests,DeleteUserServiceTests`.
-- **Done When:** All tests pass.
+  - Do not add extra flags or reorder arguments.
+- **Testing Suggestions:** Run `./mvnw clean verify -pl uam -am` from `app/` to verify it passes.
+- **Done When:** Line is edited, saved, and `git add`-ed.
 
-### Sub-Task 4: Final formatting & full verify
+---
+
+### Sub-Task 3: Fix artifact path in prepare step
 
 - **Status:** Pending
-- **Objective:** Run `spotless:apply` and `verify` to confirm formatting, all tests pass, and JaCoCo coverage meets ≥80% threshold.
+- **Objective:** Correct the `cp` source path to point to the actual Maven build output.
+- **Related Requirements:** R3
+- **Dependencies and Preconditions:** Sub-Task 2 (artifact appears only after successful Maven build).
+- **In Scope for This Sub-Task:**
+  - Edit lines 44-46 in `springboot-ci-uam.yml`: replace `cp -Rv target/uam/ artifact/` with `cp uam/target/*.jar artifact/`.
+- **Out of Scope for This Sub-Task:**
+  - Changing the `mkdir` line or the upload step.
+- **Instructions:**
+  1. Open `springboot-ci-uam.yml`.
+  2. Replace `cp -Rv target/uam/ artifact/` with `cp uam/target/*.jar artifact/`.
+  3. Optional: remove the `-v` flag from `mkdir` line — not required but harmless.
+- **Acceptance Criteria:**
+  - The command copies all JAR files from `uam/target/` into `artifact/`.
+  - The upload step's `path: app/artifact/` remains correct.
+- **Cautionary Points (Risks & Edge Cases):**
+  - If the Spring Boot plugin produces both a plain JAR and an executable JAR, `*.jar` captures both. That is fine.
+  - The `working-directory: ./app` makes `uam/target/` resolve correctly to `app/uam/target/`.
+- **Testing Suggestions:** After Maven build, verify `ls app/uam/target/*.jar` exists.
+- **Done When:** Lines are edited, saved, and `git add`-ed.
+
+---
+
+### Sub-Task 4: Remove commented-out dead code
+
+- **Status:** Pending
+- **Objective:** Delete the `build-web` and `docker-publish` commented-out job blocks.
 - **Related Requirements:** R4
-- **Dependencies and Preconditions:** Sub-Tasks 1, 2, and 3 completed.
+- **Dependencies and Preconditions:** None
 - **In Scope for This Sub-Task:**
-  1. `./mvnw spotless:apply -pl uam -am` (auto-format all changed files).
-  2. `./mvnw verify -pl uam -am` (full pipeline: compile → test → JaCoCo → spotless check).
-- **Out of Scope for This Sub-Task:** Code changes beyond formatting.
+  - Remove lines 54-79 (commented `build-web` job).
+  - Remove lines 81-133 (commented `docker-publish` job).
+- **Out of Scope for This Sub-Task:**
+  - Any active code or other files.
 - **Instructions:**
-  - Run commands in order: `spotless:apply` first, then `verify`.
-  - If `verify` fails on spotless check, run `spotless:apply` again and re-verify.
-  - If `verify` fails on JaCoCo coverage, review test coverage and add missing test scenarios.
+  1. Open `springboot-ci-uam.yml`.
+  2. Delete lines 54-79 inclusive (the `#build-web:` block).
+  3. Delete lines 81-133 inclusive (the `#docker-publish:` block).
+  4. The file should end cleanly after line 52 (`retention-days: 1`).
 - **Acceptance Criteria:**
-  - `./mvnw verify -pl uam -am` exits with `BUILD SUCCESS`.
-  - JaCoCo report shows ≥80% for both `com.anasdidi.uam.service.impl` and `com.anasdidi.uam.controller.impl`.
+  - The file contains only the active `build-app` job.
+  - No commented-out job blocks remain.
+  - YAML is valid.
 - **Cautionary Points (Risks & Edge Cases):**
-  - `spotless:check` is bound to `verify` — must run `spotless:apply` first.
-  - JaCoCo thresholds apply only to `verify`, not `test`.
-- **Testing Suggestions:** N/A — this is the final validation step.
-- **Done When:** `BUILD SUCCESS` from `./mvnw verify -pl uam -am`.
+  - Ensure blank lines between the remaining `build-app` job and end-of-file are clean.
+- **Testing Suggestions:** Validate YAML syntax: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/springboot-ci-uam.yml'))"`.
+- **Done When:** Lines deleted, saved, `git add`-ed, and YAML syntax check passes.
 
 ## Final Integration & Verification
 
-- **System-Wide Test:** `./mvnw verify -pl uam -am` passes with ≥80% JaCoCo coverage.
+- **Verification Steps:**
+  1. Confirm all 4 files are properly staged: `git diff --staged --stat` shows the updated `.github/workflows/check-pull-request.yml` and `springboot-ci-uam.yml`.
+  2. Validate YAML syntax on both workflow files.
+  3. Run `./mvnw clean verify -pl uam -am` from `app/` to confirm the Maven build works end-to-end.
+  4. Review final `git diff --staged` to confirm no unintended changes.
 - **Completion Checklist:**
-  - [ ] `@Slf4j` added to `DeleteUserService`
-  - [ ] `DeleteUserServiceTests` created with 5 test methods — all pass
-  - [ ] `UserControllerV1Tests` has 5 new `testDeleteUser_*` methods — all pass
-  - [ ] All existing tests still pass
-  - [ ] `spotless:apply` run, no formatting violations
-  - [ ] `./mvnw verify -pl uam -am` passes
-
-## Open Questions
-
-- None.
+  - [ ] `check-pull-request.yml` uses `if:` condition, no shell injection vector.
+  - [ ] `springboot-ci-uam.yml` Maven command includes `-am`.
+  - [ ] `springboot-ci-uam.yml` artifact path uses `uam/target/*.jar`.
+  - [ ] `springboot-ci-uam.yml` has no commented-out jobs.
+  - [ ] All changes staged and ready for commit.

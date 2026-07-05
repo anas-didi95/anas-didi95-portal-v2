@@ -1,61 +1,76 @@
 # Code Review Summary
 
-**Scope**: Staged changes — `ResponseEnum.java` (HTTP status corrections + new `S01_CREATED` enum) and `RegisterUserService.java` (return `S01_CREATED` instead of `S00_SUCCESS`)
-**Overall risk**: High — tests will fail on `verify`
+**Scope**: CI/CD infrastructure (4 new files under `.github/`)
+**Branch**: `feature/user-service`
+**Overall risk**: Medium
 **Verdict**: Request changes
+
+---
 
 ## Findings
 
-### [P1] High — `RegisterUserServiceTests` assert wrong enum and response code/desc after `S01_CREATED` change
+### [P0] Blocking
 
-- **Location**: `app/uam/src/test/java/com/anasdidi/uam/service/impl/RegisterUserServiceTests.java:46-51`
-- **Why it matters**: `RegisterUserService` now returns `S01_CREATED` (code `"01"`, desc `"Created"`), but the tests still assert `S00_SUCCESS` / `"00"` / `"Success"`. These assertions will fail, breaking `mvnw verify`.
-- **Evidence**:
-  - `RegisterUserService.java:47` — `return res.response(ResponseEnum.S01_CREATED).payload(payload).build();`
-  - Test line 46: `assertEquals(ResponseEnum.S00_SUCCESS, result.getResponse());` ← will get `S01_CREATED`
-  - Test line 50: `assertEquals("00", result.getResponseCode());` ← will get `"01"`
-  - Test line 51: `assertEquals("Success", result.getResponseDesc());` ← will get `"Created"`
-- **Fix**: Update `RegisterUserServiceTests.java` lines 46, 50, 51 to assert `S01_CREATED`, `"01"`, `"Created"`.
+#### Shell injection vulnerability in PR branch check
+- **Location**: `.github/workflows/check-pull-request.yml:48-52`
+- **Why it matters**: `pull_request_target` runs with full repo write permissions in the base repo's context. Unsanitized `${{ github.head_ref }}` / `${{ github.base_ref }}` expressions in a shell script allow an attacker to inject arbitrary commands via a crafted branch name (e.g., a branch named `develop" ] && curl ... #`), bypassing the gate or exfiltrating secrets.
+- **Evidence**: The `run:` block interpolates `${{ github.head_ref }}` and `${{ github.base_ref }}` directly into a shell `if` statement. GitHub Actions expands these before the shell evaluates them, and `pull_request_target` runs in the context of the target repo, giving write access to `GITHUB_TOKEN`.
+- **Fix**: Replace the shell script with a workflow-level `if:` condition that uses the structured `github` context (never interpolated into a shell):
+  
+  ```yaml
+  - name: Check branches
+    if: github.head_ref != 'develop' && github.base_ref == 'main'
+    run: |
+      echo "Merge requests to main branch are only allowed from develop branch."
+      exit 1
+  ```
 
-- **Location**: `app/uam/src/test/java/com/anasdidi/uam/service/impl/RegisterUserServiceTests.java:307-309`
-- **Why it matters**: Same root cause — second test method making the same stale assertions.
-- **Evidence**: Lines 307-309 assert `S00_SUCCESS`, `"00"`, `"Success"` but will get `S01_CREATED`, `"01"`, `"Created"`.
-- **Fix**: Update same assertions in that test method.
+#### Maven build will fail in CI — missing dependency module
+- **Location**: `.github/workflows/springboot-ci-uam.yml:101`
+- **Why it matters**: The `uam` module depends on `common`, which is a sibling Maven module. In a fresh CI checkout, `common` has never been installed into the local Maven repo. Building `-pl uam` without `-am` (also make) will fail with a dependency resolution error.
+- **Evidence**: `AGENTS.md` shows the canonical compile command is `./mvnw compile -pl uam -am` and the test command is `./mvnw test -pl uam -am` — both use `-am`. The CI command `./mvnw clean package -pl uam` omits `-am`.
+- **Fix**: Change line 101 to:
+  
+  ```yaml
+  run: ./mvnw clean package -pl uam -am
+  ```
 
-### [P1] High — Controller test asserts `isBadRequest()` for `E02_RESOURCE_ALREADY_EXISTS` but HTTP status changed to `CONFLICT`
+#### Artifact path does not exist — `target/uam/` is not a Maven build output
+- **Location**: `.github/workflows/springboot-ci-uam.yml:103-105`
+- **Why it matters**: After building the `uam` module, the build output goes to `app/uam/target/` (the module's target directory), not `app/target/uam/`. The `cp -Rv target/uam/ artifact/` command will fail because the source directory does not exist, breaking the entire pipeline.
+- **Evidence**: Maven multi-module builds place each module's output in `<module-dir>/target/`. Spring Boot fat JARs land at `uam/target/uam-<version>.jar` or `uam/target/*.jar`. The directory `target/uam/` is never created by a standard Maven build.
+- **Fix**: Either:
+  - Copy the JAR directly: `cp uam/target/*.jar artifact/`, or
+  - Adjust the path to match the actual module output structure, e.g.:
+    
+    ```yaml
+    - name: Prepare artifact
+      run: |
+        mkdir artifact
+        cp uam/target/*.jar artifact/
+    ```
 
-- **Location**: `app/uam/src/test/java/com/anasdidi/uam/controller/impl/UserControllerV1Tests.java:145-161`
-- **Why it matters**: `E02_RESOURCE_ALREADY_EXISTS.httpStatus` was changed from `HttpStatus.BAD_REQUEST` (400) to `HttpStatus.CONFLICT` (409). The mock returns a DTO with this enum, and the controller calls `ResponseEntity.status(res.getResponse().httpStatus)`. The test asserts `status().isBadRequest()` which will return 200-series "expected 400 but got 409" failure.
-- **Evidence**:
-  - `ResponseEnum.java:11` — `E02_RESOURCE_ALREADY_EXISTS(HttpStatus.CONFLICT, "E02", ...)`
-  - `UserControllerV1.java:40` — `return ResponseEntity.status(res.getResponse().httpStatus).body(res);`
-  - `UserControllerV1Tests.java:158` — `.andExpect(status().isBadRequest())` ← will get 409
-- **Fix**: Change `.andExpect(status().isBadRequest())` to `.andExpect(status().isConflict())`.
+### [P2] Medium
 
-### [P1] High — Controller test asserts `isBadRequest()` for `E03_RESOURCE_NOT_FOUND` but HTTP status changed to `NOT_FOUND`
+#### Commented-out build-web job references non-existent `web/` directory
+- **Location**: `.github/workflows/springboot-ci-uam.yml:113-138`
+- **Why it matters**: If uncommented without updating the path, this job would fail on `working-directory: ./web` since `web/` does not exist in the repository. Not blocking (fully commented out), but creates a maintenance trap.
+- **Evidence**: No `web/` directory exists at the repo root.
+- **Fix**: Remove the commented-out job entirely, or update it to reflect future intent (e.g., adjust paths or add a TODO with more context).
 
-- **Location**: `app/uam/src/test/java/com/anasdidi/uam/controller/impl/UserControllerV1Tests.java:244-259`
-- **Why it matters**: Same pattern. `E03_RESOURCE_NOT_FOUND.httpStatus` was changed from `BAD_REQUEST` to `NOT_FOUND` (404). The mock also changes via the enum. Test expects 400 but will get 404.
-- **Evidence**:
-  - `ResponseEnum.java:12` — `E03_RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "E03", ...)`
-  - `UserControllerV1Tests.java:257` — `.andExpect(status().isBadRequest())` ← will get 404
-- **Fix**: Change `.andExpect(status().isBadRequest())` to `.andExpect(status().isNotFound())`.
+#### Commented-out Docker publish references missing `Dockerfile.publish`
+- **Location**: `.github/workflows/springboot-ci-uam.yml:140-192`
+- **Why it matters**: Same pattern as above — `Dockerfile.publish` and sparse checkout will fail when uncommented.
+- **Evidence**: No `Dockerfile.publish` exists at the repo root.
+- **Fix**: Either create the Dockerfile before uncommenting, or remove the commented block.
 
-### [P2] Medium — Controller tests use `S00_SUCCESS` and `isOk()` for register success mock, semantically inconsistent with real behavior
-
-- **Location**: `app/uam/src/test/java/com/anasdidi/uam/controller/impl/UserControllerV1Tests.java:60, 187`
-- **Why it matters**: The mock-based controller tests for register success build the response with `ResponseEnum.S00_SUCCESS` and assert `status().isOk()`. These tests won't fail (mocks bypass the real service), but they no longer reflect the actual behavior (register now returns 201 Created). This creates a gap between test scenarios and production behavior.
-- **Evidence**:
-  - Line 60: `.response(ResponseEnum.S00_SUCCESS)` in mock response builder
-  - Line 71: `.andExpect(status().isOk())`
-  - Real service now returns `S01_CREATED` → HTTP 201
-- **Fix**: Update the mock to use `ResponseEnum.S01_CREATED` and assert `status().isCreated()` for register success tests. Not a blocking issue since mocks are controlled, but contributes to test drift.
+---
 
 ## Suggested Next Steps
 
-- [ ] Fix `RegisterUserServiceTests.java` assertions in both test methods (lines 46, 50, 51 and 307-309)
-- [ ] Fix `UserControllerV1Tests.java` test named `testRegisterUser_serviceReturnsE02_returnsBadRequest` — change to `isConflict()`
-- [ ] Fix `UserControllerV1Tests.java` test named `testGetUser_serviceReturnsE03_returnsBadRequest` — change to `isNotFound()`
-- [ ] (Optional) Update `testRegisterUser_success` and `testRegisterUser_jsonResponseStructure` in `UserControllerV1Tests.java` to use `S01_CREATED` and `isCreated()` for semantic correctness
-- [ ] Run `./mvnw test -pl uam -am` to confirm all tests pass after fixes
-- [ ] Run `./mvnw spotless:apply && ./mvnw verify` for full validation
+- [ ] **Fix P0 findings** before merging:
+  - Protect the branch check shell script from injection (use `if:` condition).
+  - Add `-am` flag to the Maven build command.
+  - Fix the artifact path to point to the actual build output.
+- [ ] Remove commented-out job blocks that reference non-existent resources, or create the required files first.
+- [ ] Re-run the full pipeline locally (`./mvnw clean verify -pl uam -am`) before merge to confirm the Maven fix works.

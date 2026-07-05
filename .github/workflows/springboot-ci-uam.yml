@@ -1,0 +1,51 @@
+# Reference: https://docs.github.com/en/actions/tutorials/build-and-test-code/java-with-maven
+# Reference: https://github.com/actions/starter-workflows/blob/main/ci/maven.yml
+# Reference: https://github.com/actions/starter-workflows/blob/main/ci/docker-publish.yml
+# Reference: https://github.com/actions/starter-workflows/blob/main/ci/node.js.yml
+
+name: Spring Boot CI with Maven - UAM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "develop"]
+    # Publish semver tags as releases.
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: ["main", "develop"]
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+  IS_PUSH_IMAGE: ${{ github.event_name != 'pull_request' }}
+  JAVA_VERSION: 25
+  JAVA_DIST: temurin
+
+jobs:
+  build-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+      - name: Build with Maven Wrapper
+        run: ./mvnw clean package -pl uam -am
+      - name: Prepare artifact
+        run: |
+          mkdir artifact
+          cp uam/target/*.jar artifact/
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: app/artifact/
+          retention-days: 1
